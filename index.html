@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SESTRD — Gestão ROI/ARO [DEMO]</title>
+<title>SESTRD — Gestão ROI/ARO</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -31,7 +31,8 @@ body{font-family:"IBM Plex Sans",sans-serif;background:var(--gray-lt);color:var(
 .login-title{font-size:20px;font-weight:600;color:var(--navy);margin:.5rem 0 .25rem}
 .login-sub{font-size:13px;color:var(--gray);margin-bottom:1.5rem}
 .demo-badge{background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:1.25rem}
-.login-btn{width:100%;padding:.75rem;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;margin-bottom:.75rem;font-family:inherit;transition:.15s}
+.login-btn{width:100%;padding:.75rem;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s}
+.login-btns{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.75rem}
 .btn-notificador{background:var(--navy);color:var(--white)}
 .btn-notificador:hover{background:var(--navy2)}
 .btn-chefia{background:var(--roxo-lt);color:var(--roxo);border:1.5px solid var(--roxo)}
@@ -173,7 +174,10 @@ textarea{resize:vertical;min-height:90px}
       <input type="password" id="inp-senha" placeholder="Digite sua senha" autocomplete="current-password">
     </div>
     <div id="login-erro" style="color:var(--red);font-size:13px;margin-bottom:.75rem;display:none">Usuário ou senha incorretos.</div>
-    <button class="login-btn btn-notificador" id="btn-entrar">Entrar</button>
+    <div class="login-btns">
+      <button class="login-btn btn-notificador" id="btn-notificador">🔔 Notificador</button>
+      <button class="login-btn btn-chefia" id="btn-chefia">👔 Chefia</button>
+    </div>
     <div style="font-size:11px;color:var(--gray);margin-top:2rem;line-height:1.6">Desenvolvido por <strong>Mirlane Mendes</strong> e <strong>Bruno Conte</strong><br>SEST-RD / GEXSLS — INSS &nbsp;·&nbsp; 2026</div>
   </div>
 </div>
@@ -618,7 +622,7 @@ function toast(msg) {
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
-async function tentarLogin() {
+async function tentarLogin(perfil) {
   var username = document.getElementById('inp-username').value.trim();
   var senha    = document.getElementById('inp-senha').value;
   var erroEl   = document.getElementById('login-erro');
@@ -634,7 +638,10 @@ async function tentarLogin() {
     }
     var u = res.data;
     if (u.senha_hash !== hash) {
-      hideLoading(); erroEl.style.display='block'; return;
+      hideLoading(); erroEl.textContent='Usuário ou senha incorretos.'; erroEl.style.display='block'; return;
+    }
+    if (u.perfil !== perfil) {
+      hideLoading(); erroEl.textContent='Acesso negado. Use o botão correto para o seu perfil.'; erroEl.style.display='block'; return;
     }
     state.user = { id:u.id, nome:u.nome, username:u.username, perfil:u.perfil,
                    initials:u.nome.split(' ').map(function(w){return w[0];}).join('').substring(0,2).toUpperCase() };
@@ -778,11 +785,14 @@ function abrirTrocarSenha() {
 }
 
 function logout() {
+  try { _supa.removeAllChannels(); } catch(e) {}
+  state.user = null;
+  state.rois = [];
+  roState.ros = [];
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
   document.getElementById('inp-username').value = '';
   document.getElementById('inp-senha').value    = '';
-  state.user = null;
 }
 
 // ═══════════════════════════════════════════
@@ -3053,7 +3063,7 @@ function gerarPDF(roiId) {
     doc.text(l, 22, y); y+=6;
   });
   doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(150);
-  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' - DEMO SESTRD', 105, 290, {align:'center'});
+  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' — SESTRD', 105, 290, {align:'center'});
   doc.save('Notificacao_'+roi.numero_roi+'_'+Date.now()+'.pdf');
   addLog(roi, 'PDF de notificacao gerado', 'Por: '+state.user.nome);
   toast('PDF gerado!');
@@ -3397,7 +3407,7 @@ function gerarPDFDespacho(roiId) {
   doc.setFont('helvetica','italic');
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' — DEMO SESTRD', 105, 290, {align:'center'});
+  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' — SESTRD', 105, 290, {align:'center'});
 
   doc.save('Despacho_SEI_'+roi.numero_roi+'_'+Date.now()+'.pdf');
   addLog(roi, 'Despacho SEI gerado em PDF', 'Por: '+state.user.nome);
@@ -3720,8 +3730,8 @@ function salvarROI() {
 // ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
-document.getElementById('btn-entrar').addEventListener('click', tentarLogin);
-document.getElementById('inp-senha') && document.getElementById('inp-senha').addEventListener('keydown', function(e){ if(e.key==='Enter') tentarLogin(); });
+document.getElementById('btn-notificador').addEventListener('click', function(){ tentarLogin('notificador'); });
+document.getElementById('btn-chefia').addEventListener('click', function(){ tentarLogin('chefia'); });
 document.getElementById('btn-logout').addEventListener('click', logout);
 document.getElementById('btn-nova-roi').addEventListener('click', openModal);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
