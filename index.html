@@ -3732,4 +3732,8 @@ document.querySelectorAll('.nav-item').forEach(function(n) {
 });
 document.getElementById('f-data-notif').addEventListener('change', function() {
   var v = this.value;
-  document.getElementById('f-data-limite
+  document.getElementById('f-data-limite').value = v ? fmtISO(addWD(new Date(v), 5)) : '';
+});
+</script>
+</body>
+</html>
