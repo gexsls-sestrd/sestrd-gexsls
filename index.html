@@ -259,11 +259,12 @@ textarea{resize:vertical;min-height:90px}
         <div class="form-group"><label>Matrícula</label><input id="f-matricula"></div>
         <div class="form-group"><label>Nome Interessado</label><input id="f-nome-int"></div>
         <div class="form-group"><label>CPF Interessado</label><input id="f-cpf" placeholder="000.000.000-00"></div>
-        <div class="form-group"><label>Data Limite ARO (auto: notif +5 dias úteis)</label><input type="date" id="f-data-limite" readonly></div>
+        <div class="form-group"><label>Data Limite ARO (auto: notif +5 d.u. — editável)</label><input type="date" id="f-data-limite"></div>
       </div>
     </div>
     <div class="modal-ftr">
       <button class="btn btn-secondary" id="btn-cancel-modal">Cancelar</button>
+      <button type="button" class="btn btn-secondary" onclick="limparFormROI()">🧹 Limpar</button>
       <button class="btn btn-primary" id="btn-save-modal">Salvar ROI + ARO</button>
     </div>
   </div>
@@ -355,10 +356,20 @@ function getROColor(ro){
   if(d<=1) return 'a';
   return 'v';
 }
+
+function sortROsPorPrioridade(ros) {
+  var ORDER = {r:1, a:2, v:3, c:99};
+  return ros.slice().sort(function(a, b){
+    var pa = ORDER[getROColor(a)] || 5;
+    var pb = ORDER[getROColor(b)] || 5;
+    if (pa !== pb) return pa - pb;
+    return new Date(a.data_limite_ro) - new Date(b.data_limite_ro);
+  });
+}
 function gerarIdRO(){
   var ano = new Date().getFullYear();
   var n = roState.ros.filter(function(r){ return r.data_criacao && r.data_criacao.startsWith(String(ano)); }).length+1;
-  return 'RO-'+ano+'-'+String(n).padStart('5','0');
+  return 'RO-'+ano+'-'+String(n).padStart(5,'0');
 }
 var filterState = {busca:'', status:'', etapa:'', cor:''};
 
@@ -438,7 +449,8 @@ function getColor(roi) {
     if (d <= 1) return 'a';
     return 'v';
   }
-  // expirado
+  // expirado — se ja encaminhado para SRID/COBEN, mostra como Atenção (não mais como SEI)
+  if (roi.data_srid_coben) return 'a';
   if (roi.sei && roi.sei.numero) {
     var ds = diffDays(roi.sei.data_limite);
     if (ds !== null && ds < 0) return 'xv';
@@ -1060,7 +1072,7 @@ function renderROIs() {
   html += '</select>';
   html += '<select id="f-etapa">';
   html += '<option value="">Todas as etapas</option>';
-  var etapasOpts = ['Aguardando resposta','Processo em Exigencia','Analise de Baixa','Apuracao de Irregularidade','Suporte Tecnico Pendente','Processo SEI Aberto','Baixa negada — Renotificar'];
+  var etapasOpts = ['Aguardando resposta','Processo em Exigencia','Processo em Fase de RO','Analise de Baixa','Apuracao de Irregularidade','Suporte Tecnico Pendente','Processo SEI Aberto','Baixa negada — Renotificar'];
   etapasOpts.forEach(function(e){ html += '<option value="'+e+'"'+(filterState.etapa===e?' selected':'')+'>'+e+'</option>'; });
   html += '</select>';
   html += '<select id="f-cor">';
@@ -1079,6 +1091,14 @@ function renderROIs() {
   var countStr = filtered.length === base.length
     ? 'ROIs Ativas ('+filtered.length+')'
     : filtered.length+' de '+base.length+' ROIs (filtrado)';
+
+  // Reinserir banner (only when copy available and user is chefia)
+  if (window._ultimaROIExcluida && state.user && state.user.perfil === 'chefia') {
+    html += '<div style="margin-bottom:.75rem;padding:.6rem 1rem;background:var(--amber-lt);border-radius:var(--radius);display:flex;align-items:center;gap:.75rem">';
+    html += '<span style="font-size:13px;color:var(--amber);font-weight:500">⚠ Última ROI excluída: <strong>'+window._ultimaROIExcluida.numero_roi+'</strong></span>';
+    html += '<button class="btn btn-sm" style="background:var(--amber);color:white;white-space:nowrap" onclick="reinserirUltimaROI()">🔄 Reinserir ROI</button>';
+    html += '</div>';
+  }
 
   // Legend
   html += '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;align-items:center">';
@@ -1221,33 +1241,35 @@ function renderDetail(roiId) {
   h += '<div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--blue)">'+roi.numero_roi+'</div></div>';
   h += badge(cor)+'</div>';
   h += '<div class="detail-grid">';
-  h += df('Protocolo Supervisao', roi.protocolo_supervisao, true);
-  h += df('Protocolo Tarefa', roi.protocolo_tarefa||'—', true);
-  h += df('Parecer', roi.parecer);
-  h += df('Tipo de Revisao', roi.tipo_revisao);
-  h += df('Numero da ARO', roi.numero_aro||'—', true);
-  h += df('NB', roi.nb||'—', true);
+  h += '<div class="detail-field"><div class="detail-lbl">Protocolo Supervisao</div><input class="edit-roi-field mono" data-campo="protocolo_supervisao" value="'+(roi.protocolo_supervisao||'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">Protocolo Tarefa</div><input class="edit-roi-field mono" data-campo="protocolo_tarefa" value="'+(roi.protocolo_tarefa||'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
+  h += '<div class="detail-field full"><div class="detail-lbl">Parecer</div><select class="edit-roi-field" data-campo="parecer" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"><option value="Ratifica a concessao com indicativo de revisao"'+(roi.parecer==='Ratifica a concessao com indicativo de revisao'?' selected':'')+'>Ratifica a concessao com indicativo de revisao</option><option value="Ratifica o indeferimento"'+(roi.parecer==='Ratifica o indeferimento'?' selected':'')+'>Ratifica o indeferimento</option><option value="Nao ratifica a concessao"'+(roi.parecer==='Nao ratifica a concessao'?' selected':'')+'>Nao ratifica a concessao</option><option value="Nao ratifica o indeferimento"'+(roi.parecer==='Nao ratifica o indeferimento'?' selected':'')+'>Nao ratifica o indeferimento</option></select></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">Tipo de Revisao</div><select class="edit-roi-field" data-campo="tipo_revisao" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"><option'+(roi.tipo_revisao==='Procedimental'?' selected':'')+'>Procedimental</option><option'+(roi.tipo_revisao==='Material'?' selected':'')+'>Material</option><option'+(roi.tipo_revisao==='Procedimental e Material'?' selected':'')+'>Procedimental e Material</option></select></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">Numero da ARO</div><input class="edit-roi-field mono" data-campo="numero_aro" value="'+(roi.numero_aro||'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">NB</div><input class="edit-roi-field" data-campo="nb" value="'+(roi.nb||'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
   // Data criacao editavel
   h += '<div class="detail-field"><div class="detail-lbl">Data Criacao ROI</div>';
   h += '<input type="date" value="'+(roi.data_criacao||'')+'" data-action="edit-campo" data-id="'+roi.id+'" data-campo="data_criacao" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
+  h += '</div>';
+  h += '<div style="margin-top:.75rem;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="salvarEdicaoROI(''+roi.id+'')">💾 Salvar Alterações</button></div>';
   h += '</div></div>';
 
   // Card ARO
   h += '<div class="card" style="margin-bottom:1rem">';
   h += '<div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem">ARO</div>';
   h += '<div class="detail-grid">';
-  h += df('Servidor Supervisionado', roi.aro&&roi.aro.nome_servidor?roi.aro.nome_servidor:'—');
-  h += df('Matricula', roi.aro&&roi.aro.matricula?roi.aro.matricula:'—', true);
-  h += df('Nome Interessado', roi.aro&&roi.aro.nome_interessado?roi.aro.nome_interessado:'—');
-  h += df('CPF Interessado', roi.aro&&roi.aro.cpf_interessado?roi.aro.cpf_interessado:'—', true);
+  h += '<div class="detail-field"><div class="detail-lbl">Servidor Supervisionado</div><input class="edit-aro-field" data-campo="nome_servidor" value="'+(roi.aro&&roi.aro.nome_servidor?roi.aro.nome_servidor:'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">Matricula</div><input class="edit-aro-field mono" data-campo="matricula" value="'+(roi.aro&&roi.aro.matricula?roi.aro.matricula:'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">Nome Interessado</div><input class="edit-aro-field" data-campo="nome_interessado" value="'+(roi.aro&&roi.aro.nome_interessado?roi.aro.nome_interessado:'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">CPF Interessado</div><input class="edit-aro-field mono" data-campo="cpf_interessado" value="'+(roi.aro&&roi.aro.cpf_interessado?roi.aro.cpf_interessado:'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
   // Data notificacao editavel
   h += '<div class="detail-field"><div class="detail-lbl">Data Notificacao ARO</div>';
   h += '<input type="date" value="'+(roi.aro&&roi.aro.data_notificacao?roi.aro.data_notificacao:'')+'" data-action="edit-notif" data-id="'+roi.id+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
-  h += df('Data Limite ARO (+5 d.u.)', fmtBR(roi.aro&&roi.aro.data_limite?roi.aro.data_limite:null));
+  h += '<div class="detail-field"><div class="detail-lbl">Data Limite ARO (+5 d.u.)</div><input type="date" class="edit-aro-field" data-campo="data_limite" value="'+(roi.aro&&roi.aro.data_limite?roi.aro.data_limite:'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
   h += '<div class="detail-field full"><div class="detail-lbl">Etapa Atual</div>';
   if (roi.status==='Pendente') {
     h += '<select data-action="etapa" data-id="'+roi.id+'" style="max-width:300px">';
-    var etapas = ['Aguardando resposta','Processo em Exigencia','Analise de Baixa','Apuracao de Irregularidade','Suporte Tecnico Pendente','Processo SEI Aberto','Baixa negada — Renotificar'];
+    var etapas = ['Aguardando resposta','Processo em Exigencia','Processo em Fase de RO','Analise de Baixa','Apuracao de Irregularidade','Suporte Tecnico Pendente','Processo SEI Aberto','Baixa negada — Renotificar'];
     etapas.forEach(function(e) {
       h += '<option'+(roi.aro&&roi.aro.etapa===e?' selected':'')+'>'+e+'</option>';
     });
@@ -1264,7 +1286,9 @@ function renderDetail(roiId) {
   } else {
     h += '<span class="badge bz">'+(roi.aro&&roi.aro.etapa?roi.aro.etapa:'—')+'</span>';
   }
-  h += '</div></div></div>';
+  h += '</div>';
+  h += '<div style="margin-top:.75rem;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="salvarEdicaoARO(\''+roi.id+'\')">💾 Salvar Dados ARO</button></div>';
+  h += '</div></div>';
 
   // Card SEI
   h += '<div class="card sei-card" style="margin-bottom:1rem">';
@@ -1279,8 +1303,13 @@ function renderDetail(roiId) {
   h += '<input type="date" value="'+(roi.sei&&roi.sei.data_abertura?roi.sei.data_abertura:'')+'" data-action="sei-data" data-id="'+roi.id+'"></div>';
   h += '<div class="form-group"><label>Data Limite SEI (+10 dias uteis)</label>';
   h += '<input type="date" value="'+(roi.sei&&roi.sei.data_limite?roi.sei.data_limite:'')+'" readonly></div>';
+  h += '<div class="form-group"><label>Enc. p/ SRID/COBEN</label>';
+  h += '<input type="date" id="f-data-srid" value="'+(roi.data_srid_coben||'')+'" data-action="srid-data" data-id="'+roi.id+'" title="Data de encaminhamento para SRID/COBEN"></div>';
   h += '<div class="form-group" style="justify-content:flex-end;align-items:flex-end">';
   h += (roi.sei&&roi.sei.numero?'<span style="font-size:12.5px;color:var(--roxo)">🟣 Processo registrado</span>':'<span style="font-size:12.5px;color:var(--gray)">Preencha para registrar</span>');
+  if (roi.data_srid_coben) {
+    h += '<br><span style="font-size:11.5px;color:var(--green);font-weight:500;margin-top:.25rem;display:block">✅ Enc. SRID/COBEN: '+fmtBR(roi.data_srid_coben)+'</span>';
+  }
   h += '</div></div></div>';
 
   // Exigencia card
@@ -1353,8 +1382,9 @@ function renderDetail(roiId) {
     h += '<div class="form-grid">';
     h += '<div class="form-group"><label>Numero da Subtarefa PAT</label>';
     h += '<input value="'+(roi.aro.suporte_num_subtarefa||'')+'" placeholder="Ex: SUB-2025-00123" data-action="suporte-num" data-id="'+roi.id+'" style="font-family:var(--mono);font-size:13px"></div>';
-    h += '<div class="form-group"><label>Data de Abertura do Suporte</label>';
-    h += '<input type="date" value="'+(roi.aro.data_suporte_abertura||'')+'" readonly></div>';
+    h += '<div class="form-group"><label>Data de Abertura do Suporte (editável)</label>';
+    h += '<input type="date" value="'+(roi.aro.data_suporte_abertura||'')+'" data-action="suporte-data" data-id="'+roi.id+'">';
+    h += '</div>';
 
     h += '<div class="form-group full"><label>Resposta ao Suporte Tecnico</label>';
     if (respondido) {
@@ -1433,6 +1463,98 @@ function df(lbl, val, mono) {
 // ══════════════════════════════════════════
 // REVISAO DE OFICIO
 // ══════════════════════════════════════════
+
+function roAtivasTableHTML(ativas) {
+  if (!ativas.length) {
+    return '<div class="empty"><div style="font-size:36px;opacity:.3">🔄</div>'
+      +'<div style="font-weight:600;margin:.5rem 0;color:var(--text2)">Nenhuma RO encontrada</div>'
+      +'<div style="font-size:13px;color:var(--gray)">Clique em + Nova RO ou ajuste o filtro</div></div>';
+  }
+  var h = '<table class="roi-table"><thead><tr>';
+  h += '<th>ROI / ARO</th><th>Numero da RO</th><th>Mat. Revisor</th>';
+  h += '<th>Parecer</th><th>Tipo</th><th>Etapa RO</th>';
+  h += '<th>Data Limite</th><th>Prazo</th><th>Status</th><th>Acoes</th>';
+  h += '</tr></thead><tbody>';
+  ativas.forEach(function(ro){
+    var cor  = getROColor(ro);
+    var d    = diffDays(ro.data_limite_ro);
+    var pStr = d===null?'—':(d<0?Math.abs(d)+'d atraso':(d===0?'Vence hoje':d+'d'));
+    var pCol = cor==='r'?'var(--red)':cor==='a'?'var(--amber)':'var(--green)';
+    var etBc = 'background:var(--gray-lt);color:var(--gray)';
+    if(ro.etapa_ro==='Analise de Baixa')           etBc='background:var(--blue-lt);color:var(--blue)';
+    if(ro.etapa_ro==='Aguardando Baixa da Chefia') etBc='background:var(--blue-lt);color:var(--blue);font-weight:600';
+    if(ro.etapa_ro==='Exigencia')                  etBc='background:var(--orange-lt);color:var(--orange)';
+    if(ro.etapa_ro==='Apuracao de Irregularidade') etBc='background:var(--red-lt);color:var(--red)';
+    if(ro.etapa_ro==='Suporte Tecnico Pendente')   etBc='background:var(--amber-lt);color:var(--amber)';
+    var nCom = ro.comentarios ? ro.comentarios.length : 0;
+    h += '<tr class="'+ROWC[cor]+'">';
+    h += '<td><div style="font-family:var(--mono);font-size:12px;color:var(--blue)">'+ro.numero_roi+'</div>';
+    h += '<div style="font-size:11px;color:var(--gray)">'+ro.numero_aro+'</div></td>';
+    h += '<td style="font-family:var(--mono);font-size:12.5px">'+ro.numero_ro+'</td>';
+    h += '<td style="font-family:var(--mono);font-size:12.5px">'+ro.matricula_revisor+'</td>';
+    h += '<td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px">'+ro.parecer+'</td>';
+    h += '<td><span class="badge bb" style="font-size:11px">'+ro.tipo_revisao+'</span></td>';
+    h += '<td><span class="badge" style="'+etBc+';font-size:11px">'+ro.etapa_ro+'</span></td>';
+    h += '<td style="white-space:nowrap">'+fmtBR(ro.data_limite_ro)+'</td>';
+    h += '<td><span style="font-size:12.5px;font-weight:500;color:'+pCol+'">'+pStr+'</span></td>';
+    h += '<td>'+badge(cor, {v:'No Prazo',a:'Atencao',r:'Atrasado',c:'Encerrado'}[cor]||'')+'</td>';
+    h += '<td style="white-space:nowrap">';
+    h += '<span data-ro-action="comment" data-ro-id="'+ro.id+'" title="Comentários" style="cursor:pointer;font-size:16px;padding:2px 6px;display:inline-block">💬'+(nCom>0?'<sup style="background:var(--blue);color:white;border-radius:50%;font-size:9px;padding:1px 3px;font-weight:700">'+nCom+'</sup>':'')+'</span>';
+    h += '<span data-ro-action="edit" data-ro-id="'+ro.id+'" title="Editar" style="cursor:pointer;font-size:15px;padding:2px 5px;display:inline-block">✏️</span>';
+    if(state.user && state.user.perfil==='chefia'){
+      h += '<span data-ro-action="baixa" data-ro-id="'+ro.id+'" title="Dar Baixa" style="cursor:pointer;font-size:16px;padding:2px 5px;display:inline-block">⚖️</span>';
+      h += '<span data-ro-action="excluir" data-ro-id="'+ro.id+'" title="Excluir" style="cursor:pointer;font-size:15px;padding:2px 5px;display:inline-block">🗑</span>';
+    } else {
+      var jaConcluida = ro.etapa_ro === 'Aguardando Baixa da Chefia';
+      if(!jaConcluida){
+        h += '<span data-ro-action="informar" data-ro-id="'+ro.id+'" title="Informar conclusao" style="cursor:pointer;font-size:15px;padding:2px 5px;display:inline-block">📢</span>';
+      } else {
+        h += '<span title="Aguardando Baixa" style="font-size:13px;color:var(--blue);padding:2px 5px;display:inline-block">⏳ Aguardando chefia</span>';
+      }
+    }
+    h += '</td></tr>';
+  });
+  h += '</tbody></table>';
+  return h;
+}
+
+function filtrarROs(searchTerm) {
+  var term = (searchTerm || '').toLowerCase().trim();
+  var statusFilter = (document.getElementById('ro-filter-status') || {value:''}).value;
+  var todas = roState.ros.filter(function(r){ return r.status === 'Ativa'; });
+  var resultado = todas.filter(function(ro){
+    if (statusFilter && getROColor(ro) !== statusFilter) return false;
+    if (!term) return true;
+    var hay = [ro.numero_roi||'',ro.numero_aro||'',ro.numero_ro||'',
+               ro.matricula_revisor||'',ro.parecer||'',ro.tipo_revisao||'',ro.etapa_ro||''
+              ].join(' ').toLowerCase();
+    return hay.indexOf(term) !== -1;
+  });
+  resultado = sortROsPorPrioridade(resultado);
+  var tblEl  = document.getElementById('ro-main-table');
+  var titleEl = document.getElementById('ro-table-title');
+  if (titleEl) {
+    titleEl.textContent = resultado.length === todas.length
+      ? 'ROs Ativas (' + resultado.length + ')'
+      : resultado.length + ' de ' + todas.length + ' ROs (filtrado)';
+  }
+  if (tblEl) {
+    tblEl.innerHTML = roAtivasTableHTML(resultado);
+    tblEl.onclick = function(e){
+      var t = e.target.closest('[data-ro-action]');
+      if(!t) return; e.stopPropagation();
+      var act = t.getAttribute('data-ro-action');
+      var rid = t.getAttribute('data-ro-id');
+      if(act==='comment')  abrirComentarios(rid);
+      if(act==='edit')     editarRO(rid);
+      if(act==='informar') informarROConcluida(rid);
+      if(act==='baixa')    baixaRO(rid);
+      if(act==='excluir')  excluirRO(rid);
+      if(act==='reativar') reativarRO(rid);
+    };
+  }
+}
+
 function renderRO() {
   var ros = roState.ros;
   var ativas     = ros.filter(function(r){ return r.status==='Ativa'; });
@@ -1474,68 +1596,26 @@ function renderRO() {
     h += '</div></div>';
   }
 
-  // Add RO button
-  h += '<div style="display:flex;justify-content:flex-end;margin-bottom:1rem">';
+  // Search bar + Add RO button
+  h += '<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+  h += '<input type="text" id="ro-search" placeholder="🔍 Buscar por ROI, ARO, RO, revisor, parecer, etapa..." ';
+  h += 'style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--gray-bd);border-radius:6px;font-size:14px;font-family:inherit" ';
+  h += 'oninput="filtrarROs(this.value)">';
+  h += '<select id="ro-filter-status" onchange="filtrarROs(document.getElementById(\'ro-search\').value)" ';
+  h += 'style="padding:8px;border:1px solid var(--gray-bd);border-radius:6px;font-size:14px;font-family:inherit">';
+  h += '<option value="">Todos os status</option>';
+  h += '<option value="r">🔴 Atrasado</option>';
+  h += '<option value="a">🟡 Atenção</option>';
+  h += '<option value="v">🟢 No Prazo</option>';
+  h += '</select>';
   h += '<button class="btn btn-primary" onclick="abrirModalRO()">+ Nova RO</button>';
   h += '</div>';
 
   // Table
   h += '<div class="card">';
-  h += '<div class="card-title">ROs Ativas ('+ativas.length+')</div>';
+  h += '<div class="card-title" id="ro-table-title">ROs Ativas ('+ativas.length+')</div>';
 
-  if(!ativas.length){
-    h += '<div class="empty"><div style="font-size:36px;opacity:.3">🔄</div>';
-    h += '<div style="font-weight:600;margin:.5rem 0;color:var(--text2)">Nenhuma RO ativa</div>';
-    h += '<div style="font-size:13px;color:var(--gray)">Clique em + Nova RO para cadastrar</div></div>';
-  } else {
-    h += '<table class="roi-table"><thead><tr>';
-    h += '<th>ROI / ARO</th><th>Numero da RO</th><th>Mat. Revisor</th>';
-    h += '<th>Parecer</th><th>Tipo</th><th>Etapa RO</th>';
-    h += '<th>Data Limite</th><th>Prazo</th><th>Status</th><th>Acoes</th>';
-    h += '</tr></thead><tbody>';
-
-    ativas.forEach(function(ro){
-      var cor  = getROColor(ro);
-      var d    = diffDays(ro.data_limite_ro);
-      var pStr = d===null?'—':(d<0?Math.abs(d)+'d atraso':(d===0?'Vence hoje':d+'d'));
-      var pCol = cor==='r'?'var(--red)':cor==='a'?'var(--amber)':'var(--green)';
-      var etBc = 'background:var(--gray-lt);color:var(--gray)';
-      if(ro.etapa_ro==='Analise de Baixa')           etBc='background:var(--blue-lt);color:var(--blue)';
-      if(ro.etapa_ro==='Aguardando Baixa da Chefia') etBc='background:var(--blue-lt);color:var(--blue);font-weight:600';
-      if(ro.etapa_ro==='Exigencia')                  etBc='background:var(--orange-lt);color:var(--orange)';
-      if(ro.etapa_ro==='Apuracao de Irregularidade') etBc='background:var(--red-lt);color:var(--red)';
-      if(ro.etapa_ro==='Suporte Tecnico Pendente')   etBc='background:var(--amber-lt);color:var(--amber)';
-      var nCom = ro.comentarios ? ro.comentarios.length : 0;
-
-      h += '<tr class="'+ROWC[cor]+'">';
-      h += '<td><div style="font-family:var(--mono);font-size:12px;color:var(--blue)">'+ro.numero_roi+'</div>';
-      h += '<div style="font-size:11px;color:var(--gray)">'+ro.numero_aro+'</div></td>';
-      h += '<td style="font-family:var(--mono);font-size:12.5px">'+ro.numero_ro+'</td>';
-      h += '<td style="font-family:var(--mono);font-size:12.5px">'+ro.matricula_revisor+'</td>';
-      h += '<td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px">'+ro.parecer+'</td>';
-      h += '<td><span class="badge bb" style="font-size:11px">'+ro.tipo_revisao+'</span></td>';
-      h += '<td><span class="badge" style="'+etBc+';font-size:11px">'+ro.etapa_ro+'</span></td>';
-      h += '<td style="white-space:nowrap">'+fmtBR(ro.data_limite_ro)+'</td>';
-      h += '<td><span style="font-size:12.5px;font-weight:500;color:'+pCol+'">'+pStr+'</span></td>';
-      h += '<td>'+badge(cor, {v:'No Prazo',a:'Atencao',r:'Atrasado',c:'Encerrado'}[cor]||'')+'</td>';
-      h += '<td style="white-space:nowrap">';
-      h += '<span data-ro-action="comment" data-ro-id="'+ro.id+'" title="Comentarios" style="cursor:pointer;font-size:16px;padding:2px 6px;display:inline-block">💬'+(nCom>0?'<sup style="background:var(--blue);color:white;border-radius:50%;font-size:9px;padding:1px 3px;font-weight:700">'+nCom+'</sup>':'')+'</span>';
-      h += '<span data-ro-action="edit" data-ro-id="'+ro.id+'" title="Editar" style="cursor:pointer;font-size:15px;padding:2px 5px;display:inline-block">✏️</span>';
-      if(state.user && state.user.perfil==='chefia'){
-        h += '<span data-ro-action="baixa" data-ro-id="'+ro.id+'" title="Dar Baixa — Chefia" style="cursor:pointer;font-size:16px;padding:2px 5px;display:inline-block">⚖️</span>';
-        h += '<span data-ro-action="excluir" data-ro-id="'+ro.id+'" title="Excluir Cadastro" style="cursor:pointer;font-size:15px;padding:2px 5px;display:inline-block">🗑</span>';
-      } else {
-        var jaConcluida = ro.etapa_ro === 'Aguardando Baixa da Chefia';
-        if(!jaConcluida){
-          h += '<span data-ro-action="informar" data-ro-id="'+ro.id+'" title="Informar que RO foi realizada" style="cursor:pointer;font-size:15px;padding:2px 5px;display:inline-block">📢</span>';
-        } else {
-          h += '<span title="Aguardando Baixa da Chefia" style="font-size:13px;color:var(--blue);padding:2px 5px;display:inline-block">⏳ Aguardando chefia</span>';
-        }
-      }
-      h += '</td></tr>';
-    });
-    h += '</tbody></table>';
-  }
+  h += '<div id="ro-main-table">'+roAtivasTableHTML(ativas)+'</div>';
   h += '</div>';
 
   // Encerradas section (collapsed summary)
@@ -1614,7 +1694,8 @@ function abrirModalRO(roId) {
   html += '<div class="form-group"><label>Etapa da RO</label><select id="ro-f-etapa">';
   etapas.forEach(function(e){ html += '<option'+(ro&&ro.etapa_ro===e?' selected':'')+'>'+e+'</option>'; });
   html += '</select></div>';
-  html += fg('Data Limite RO','date','ro-f-limite',ro?ro.data_limite_ro:'','');
+  html += '<div class="form-group"><label>Data Limite RO</label><input type="date" id="ro-f-limite" value="'+(ro?ro.data_limite_ro||'':'')+'" oninput="atualizarPrazoRO(this.value)"></div>';
+  html += '<div class="form-group"><label>Prazo do Trâmite (espelho)</label><input type="date" id="ro-f-prazo-tramite" value="'+(ro?ro.data_limite_ro||'':'')+'" readonly style="background:var(--gray-lt);color:var(--gray)"></div>';
   html += '</div></div>';
   html += '<div class="modal-ftr">';
   html += '<button class="btn btn-secondary" onclick="fecharModalRO()">Cancelar</button>';
@@ -1628,6 +1709,10 @@ function abrirModalRO(roId) {
 function fg(lbl, tipo, id, val, ph){
   return '<div class="form-group"><label>'+lbl+'</label>'
     +'<input type="'+tipo+'" id="'+id+'" value="'+(val||'')+'" placeholder="'+(ph||'')+'"></div>';
+}
+function atualizarPrazoRO(valor) {
+  var prazo = document.getElementById('ro-f-prazo-tramite');
+  if (prazo) prazo.value = valor;
 }
 function fecharModalRO(){
   var m = document.getElementById('modal-ro');
@@ -1723,9 +1808,15 @@ function excluirRO(id) {
     toast('Exclusao cancelada. Justificativa obrigatoria.');
     return;
   }
+  if (!ro.comentarios) ro.comentarios = [];
+  ro.comentarios.push({
+    ts: new Date().toISOString(),
+    user: state.user.nome,
+    texto: '[EXCLUSÃO] RO excluída pela Chefia. Motivo: ' + justif.trim()
+  });
   roState.ros = roState.ros.filter(function(r){ return r.id !== id; });
   _supa.from('ros').delete().eq('id',id);
-  toast('RO excluida: '+ro.numero_ro);
+  toast('RO excluída: '+ro.numero_ro);
   renderRO();
 }
 
@@ -2188,7 +2279,7 @@ async function renderUsuarios() {
   html += '<button class="btn btn-primary" onclick="abrirModalUsuario()">+ Novo Usuario</button>';
   html += '</div>';
   html += '<div class="card">';
-  html += '<div class="card-title">Usuarios cadastrados ('+lista.length+'/10)</div>';
+  html += '<div class="card-title">Usuarios cadastrados ('+lista.length+'/20)</div>';
   html += '<table class="roi-table"><thead><tr>';
   html += '<th>Usuario</th><th>Nome</th><th>Perfil</th><th>Status</th><th>Criado em</th><th>Acoes</th>';
   html += '</tr></thead><tbody>';
@@ -2203,6 +2294,9 @@ async function renderUsuarios() {
     html += '<button class="btn btn-secondary btn-sm" onclick="abrirModalSenha(\''+u.id+'\',\''+u.nome+'\')">🔑 Senha</button>';
     if (u.username !== state.user.username) {
       html += '<button class="btn btn-sm '+(u.ativo?'btn-danger':'btn-green')+'" onclick="toggleUsuario(\''+u.id+'\','+(u.ativo?'false':'true')+')">'+(u.ativo?'Desativar':'Ativar')+'</button>';
+      if (state.user.perfil === 'chefia') {
+        html += '<button class="btn btn-danger btn-sm" onclick="deletarUsuario(\''+u.id+'\',\''+u.nome.replace(/\'/g,"\\\'")+'\'" title="Excluir permanentemente">🗑 Excluir</button>';
+      }
     }
     html += '</td></tr>';
   });
@@ -2236,7 +2330,7 @@ async function criarUsuario() {
   if (!nome||!username||!senha) { toast('Preencha todos os campos.'); return; }
   if (senha.length < 6) { toast('Senha deve ter ao menos 6 caracteres.'); return; }
   var countRes = await _supa.from('usuarios').select('id', {count:'exact',head:true}).eq('ativo',true);
-  if ((countRes.count||0) >= 10) { toast('Limite de 10 usuarios atingido.'); return; }
+  if ((countRes.count||0) >= 20) { toast('Limite de 20 usuarios atingido.'); return; }
   showLoading('Criando usuario...');
   var hash = await hashSenha(senha);
   var res  = await _supa.from('usuarios').insert({username,senha_hash:hash,perfil,nome,ativo:true});
@@ -2284,6 +2378,21 @@ async function toggleUsuario(userId, novoStatus) {
   await _supa.from('usuarios').update({ativo:novoStatus}).eq('id', userId);
   hideLoading();
   toast(novoStatus ? 'Usuario ativado.' : 'Usuario desativado.');
+  renderUsuarios();
+}
+
+async function deletarUsuario(userId, nomeU) {
+  if (!state.user || state.user.perfil !== 'chefia') {
+    toast('Apenas Chefia pode excluir usuários.');
+    return;
+  }
+  if (!confirm('ATENÇÃO: Esta ação é irreversível!\n\nExcluir permanentemente o usuário "' + nomeU + '"?\n\nIsso liberará uma vaga para novo cadastro.')) return;
+  var justif = prompt('Justificativa para exclusão (obrigatório):');
+  if (!justif || !justif.trim()) { toast('Justificativa obrigatória.'); return; }
+  showLoading('Excluindo usuário...');
+  await _supa.from('usuarios').delete().eq('id', userId);
+  hideLoading();
+  toast('Usuário "' + nomeU + '" excluído permanentemente.');
   renderUsuarios();
 }
 
@@ -2623,7 +2732,7 @@ function gerarPDFRelatorio() {
     tableROI(concl);
   }
   if(f.ros){
-    var rosA = roState.ros.filter(function(r){return r.status==='Ativa';});
+    var rosA = sortROsPorPrioridade(roState.ros.filter(function(r){return r.status==='Ativa';}));
     secTitle('Revisao de Oficio (RO) — Ativas ('+rosA.length+')');
     tableRO(rosA, false);
   }
@@ -2752,7 +2861,7 @@ function gerarExcelRelatorio() {
     }
   }
   if(f.ros){
-    var rosA = roState.ros.filter(function(r){return r.status==='Ativa';});
+    var rosA = sortROsPorPrioridade(roState.ros.filter(function(r){return r.status==='Ativa';}));
     if(rosA.length){
       var ws3 = XLSX.utils.json_to_sheet(rosA.map(roRow));
       XLSX.utils.book_append_sheet(wb, ws3, 'ROs Ativas');
@@ -3074,6 +3183,11 @@ function handleChange(e) {
     }
   }
 
+  if (action==='suporte-data') {
+    roi.aro.data_suporte_abertura = t.value;
+    addLog(roi,'Suporte: data de abertura editada manualmente', t.value);
+    save(); toast('Data de abertura do Suporte salva!');
+  }
   if (action==='suporte-num') {
     roi.aro.suporte_num_subtarefa = t.value;
     addLog(roi,'Suporte: subtarefa registrada', t.value);
@@ -3082,6 +3196,13 @@ function handleChange(e) {
   if (action==='suporte-resposta') {
     roi.aro.suporte_resposta = t.value;
     save();
+  }
+  if (action==='srid-data') {
+    roi.data_srid_coben = t.value || null;
+    addLog(roi, t.value ? 'Encaminhado para SRID/COBEN' : 'Data SRID/COBEN removida', t.value || '');
+    save();
+    if (t.value) toast('Data SRID/COBEN registrada: '+fmtBR(t.value));
+    renderDetail(id);
   }
   if (action==='sei-num') {
     if (!roi.sei) roi.sei = {};
@@ -3311,6 +3432,54 @@ function renotificar(id) {
   renderDetail(id);
 }
 
+
+function salvarEdicaoROI(id) {
+  var roi = state.rois.find(function(r){ return r.id===id; });
+  if (!roi) return;
+  if (!state.user || (state.user.perfil !== 'chefia' && state.user.perfil !== 'notificador')) {
+    toast('Sem permissao para editar.'); return;
+  }
+  var campos = document.querySelectorAll('.edit-roi-field');
+  var alteracoes = [];
+  campos.forEach(function(el){
+    var campo = el.getAttribute('data-campo');
+    var valor = el.value;
+    if ((roi[campo]||'') !== valor) {
+      alteracoes.push(campo+': '+(roi[campo]||'')+'->'+valor);
+      roi[campo] = valor;
+    }
+  });
+  if (!alteracoes.length) { toast('Nenhuma alteração detectada.'); return; }
+  addLog(roi, 'Edição manual de campos ROI', alteracoes.join(' | '));
+  saveSingle(roi);
+  toast('Alterações salvas com sucesso!');
+  renderDetail(id);
+}
+
+function salvarEdicaoARO(id) {
+  var roi = state.rois.find(function(r){ return r.id===id; });
+  if (!roi) return;
+  if (!state.user || (state.user.perfil !== 'chefia' && state.user.perfil !== 'notificador')) {
+    toast('Sem permissao para editar.'); return;
+  }
+  if (!roi.aro) roi.aro = {};
+  var campos = document.querySelectorAll('.edit-aro-field');
+  var alteracoes = [];
+  campos.forEach(function(el){
+    var campo = el.getAttribute('data-campo');
+    var valor = el.value;
+    if ((roi.aro[campo]||'') !== valor) {
+      alteracoes.push(campo+': '+(roi.aro[campo]||'')+'->'+valor);
+      roi.aro[campo] = valor;
+    }
+  });
+  if (!alteracoes.length) { toast('Nenhuma alteração detectada.'); return; }
+  addLog(roi, 'Edição manual de campos ARO', alteracoes.join(' | '));
+  saveSingle(roi);
+  toast('Dados ARO salvos com sucesso!');
+  renderDetail(id);
+}
+
 function excluirROI(id) {
   if (!state.user || state.user.perfil !== 'chefia') {
     toast('Apenas a Chefia pode excluir cadastros.');
@@ -3328,15 +3497,47 @@ function excluirROI(id) {
     toast('Exclusao cancelada. Justificativa obrigatoria.');
     return;
   }
-  // Log before deletion
   var infoExcluido = roi.numero_roi+' | Servidor: '+(roi.aro&&roi.aro.nome_servidor?roi.aro.nome_servidor:'—');
-  // Append to global log (using addLog before removing)
-  addLog(roi, '[EXCLUSAO] Cadastro excluido pela Chefia', 'Motivo: '+justif.trim());
-  // Remove from state
+  var manterCopia = confirm(
+    'Deseja manter uma cópia dos dados para eventual reinserção?\n\n'+
+    'OK = manter cópia (recomendado) | Cancelar = excluir sem cópia'
+  );
+  if (manterCopia) {
+    window._ultimaROIExcluida = JSON.parse(JSON.stringify(roi));
+    window._ultimaROIExcluida._justifExclusao = justif.trim();
+  }
+  addLog(roi, '[EXCLUSAO] Cadastro excluído pela Chefia', 'Motivo: '+justif.trim());
   state.rois = state.rois.filter(function(r){ return r.id !== id; });
   _supa.from('rois').delete().eq('id',id);
-  toast('Cadastro excluido: '+infoExcluido);
+  var msgExcl = 'Cadastro excluído: '+infoExcluido;
+  if (manterCopia) msgExcl += '. Use "Reinserir Última ROI" na lista para restaurar.';
+  toast(msgExcl);
   showView('rois');
+}
+
+function reinserirUltimaROI() {
+  var copia = window._ultimaROIExcluida;
+  if (!copia) { toast('Nenhuma ROI excluída disponível para reinserção.'); return; }
+  if (!state.user || state.user.perfil !== 'chefia') { toast('Apenas a Chefia pode reinserir cadastros.'); return; }
+  var jaExiste = state.rois.find(function(r){ return r.numero_roi === copia.numero_roi; });
+  if (jaExiste) { toast('Erro: ROI '+copia.numero_roi+' já existe no sistema.'); return; }
+  var justif = prompt(
+    'REINSERÇÃO DE CADASTRO\n\nROI: '+copia.numero_roi+
+    '\nServidor: '+(copia.aro&&copia.aro.nome_servidor?copia.aro.nome_servidor:'—')+
+    '\n\nJustificativa da reinserção (obrigatório):'
+  );
+  if (!justif || !justif.trim()) { toast('Reinserção cancelada. Justificativa obrigatória.'); return; }
+  var novaROI = JSON.parse(JSON.stringify(copia));
+  novaROI.id = Date.now(); // ID numérico para compatibilidade com a coluna id da tabela rois
+  delete novaROI._justifExclusao;
+  if (!novaROI.logs) novaROI.logs = [];
+  novaROI.logs.push({ts:new Date().toISOString(),user:state.user.nome,
+    acao:'[REINSERÇÃO] Cadastro reinserido pela Chefia',detalhe:'Motivo: '+justif.trim()});
+  state.rois.unshift(novaROI);
+  saveSingle(novaROI);
+  window._ultimaROIExcluida = null;
+  toast('ROI '+novaROI.numero_roi+' reinserida com sucesso!');
+  renderROIs();
 }
 
 function reativarROI(id) {
@@ -3463,6 +3664,18 @@ function openModal() {
   document.getElementById('modal').style.display='flex';
 }
 function closeModal() { document.getElementById('modal').style.display='none'; }
+
+function limparFormROI() {
+  var ids = ['f-roi','f-aro','f-data-criacao','f-data-notif','f-prot-sup','f-prot-tar',
+             'f-nb','f-nome-serv','f-matricula','f-nome-int','f-cpf','f-data-limite'];
+  ids.forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var parecer = document.getElementById('f-parecer');
+  if(parecer) parecer.value='';
+  var tipo = document.getElementById('f-tipo');
+  if(tipo) tipo.value='';
+  toast('Formulário limpo.');
+}
+
 function salvarROI() {
   var roi  = document.getElementById('f-roi').value.trim();
   var aro  = document.getElementById('f-aro').value.trim();
@@ -3519,8 +3732,4 @@ document.querySelectorAll('.nav-item').forEach(function(n) {
 });
 document.getElementById('f-data-notif').addEventListener('change', function() {
   var v = this.value;
-  document.getElementById('f-data-limite').value = v ? fmtISO(addWD(new Date(v), 5)) : '';
-});
-</script>
-</body>
-</html>
+  document.getElementById('f-data-limite
