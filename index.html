@@ -1261,7 +1261,7 @@ function renderDetail(roiId) {
   h += '<div class="detail-field"><div class="detail-lbl">Data Criacao ROI</div>';
   h += '<input type="date" value="'+(roi.data_criacao||'')+'" data-action="edit-campo" data-id="'+roi.id+'" data-campo="data_criacao" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
   h += '</div>';
-  h += '<div style="margin-top:.75rem;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="salvarEdicaoROI(''+roi.id+'')">💾 Salvar Alterações</button></div>';
+  h += '<div style="margin-top:.75rem;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="salvarEdicaoROI(\''+roi.id+'\')">💾 Salvar Alterações</button></div>';
   h += '</div></div>';
 
   // Card ARO
