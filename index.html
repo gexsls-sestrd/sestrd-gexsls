@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SESTRD — Gestão ROI/ARO</title>
+<title>SESTRD — Gestão ROI/ARO [DEMO]</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -31,8 +31,8 @@ body{font-family:"IBM Plex Sans",sans-serif;background:var(--gray-lt);color:var(
 .login-title{font-size:20px;font-weight:600;color:var(--navy);margin:.5rem 0 .25rem}
 .login-sub{font-size:13px;color:var(--gray);margin-bottom:1.5rem}
 .demo-badge{background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:1.25rem}
-.login-btn{width:100%;padding:.75rem;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s}
 .login-btns{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.75rem}
+.login-btn{width:100%;padding:.75rem;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s}
 .btn-notificador{background:var(--navy);color:var(--white)}
 .btn-notificador:hover{background:var(--navy2)}
 .btn-chefia{background:var(--roxo-lt);color:var(--roxo);border:1.5px solid var(--roxo)}
@@ -217,6 +217,8 @@ textarea{resize:vertical;min-height:90px}
       <div class="topbar-title" id="topbar-title">Dashboard</div>
       <div class="topbar-actions">
         <button class="btn btn-primary btn-sm" id="btn-nova-roi">+ Nova ROI</button>
+        <button class="btn btn-secondary btn-sm" id="btn-importar-pat">📋 Importar do PAT</button>
+        <button class="btn btn-secondary btn-sm" id="btn-importar-csv">📥 Importar em Lote</button>
         <button class="btn btn-secondary btn-sm" id="btn-logout">Sair</button>
       </div>
     </div>
@@ -270,6 +272,97 @@ textarea{resize:vertical;min-height:90px}
       <button class="btn btn-secondary" id="btn-cancel-modal">Cancelar</button>
       <button type="button" class="btn btn-secondary" onclick="limparFormROI()">🧹 Limpar</button>
       <button class="btn btn-primary" id="btn-save-modal">Salvar ROI + ARO</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL IMPORTAR DO PAT (entrada por texto + fila de revisão) ═══ -->
+<div class="modal-bg" id="modal-pat" style="display:none">
+  <div class="modal" style="width:960px;max-width:96vw">
+    <div class="modal-hdr">
+      <div class="modal-hdr-title">📋 Importar ROIs do PAT (texto)</div>
+      <button class="xbtn" id="btn-close-pat">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--blue-lt);border-radius:var(--radius);padding:.65rem 1rem;margin-bottom:.75rem;font-size:13px;color:var(--blue)">
+        Cole o bloco <strong>"Campos Adicionais"</strong> da tarefa do PAT e clique em <strong>Extrair</strong>.
+        Os dados disponíveis serão preenchidos automaticamente; complete os campos obrigatórios faltantes
+        (<strong>ROI, Servidor, Parecer, Tipo</strong>) na fila de revisão antes de confirmar.
+      </div>
+      <textarea id="pat-input" rows="7" placeholder="Cole aqui o bloco Campos Adicionais da tarefa PAT..."
+        style="width:100%;font-family:monospace;font-size:13px;padding:.6rem;border:1px solid var(--border,#cbd5e1);border-radius:var(--radius);resize:vertical"></textarea>
+      <div style="display:flex;gap:.5rem;margin:.6rem 0;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="btn-pat-extrair">➕ Extrair e adicionar à fila</button>
+        <button class="btn btn-secondary btn-sm" id="btn-pat-limpar-input">🧹 Limpar texto</button>
+        <button class="btn btn-secondary btn-sm" id="btn-pat-limpar-fila">🗑 Esvaziar fila</button>
+      </div>
+      <div id="pat-queue"></div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn btn-secondary" id="btn-cancel-pat">Fechar</button>
+      <button class="btn btn-primary" id="btn-confirmar-pat">✓ Confirmar lote</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL IMPORTAR EM LOTE (CSV) ═══ -->
+<div class="modal-bg" id="modal-csv" style="display:none">
+  <div class="modal" style="width:980px;max-width:97vw">
+    <div class="modal-hdr">
+      <div class="modal-hdr-title">📥 Importar ROIs em Lote (CSV)</div>
+      <button class="xbtn" id="btn-close-csv">✕</button>
+    </div>
+    <div class="modal-body" id="csv-modal-body">
+      <!-- ETAPA 1: entrada de texto -->
+      <div id="csv-step-input">
+        <div style="background:var(--blue-lt);border-radius:var(--radius);padding:.65rem 1rem;margin-bottom:.75rem;font-size:13px;color:var(--blue)">
+          Cole os dados abaixo, um registro por linha, separado por <strong>ponto-e-vírgula (;)</strong>.
+          A primeira linha pode ser um cabeçalho (será ignorada automaticamente).
+        </div>
+        <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:var(--radius);padding:.6rem 1rem;font-size:12px;color:#64748b;margin-bottom:.6rem">
+          <strong>Formato:</strong> ROI ; ARO ; Prot. Supervisão ; Prot. Tarefa ; NB ; Servidor ; Matrícula ; Parecer ; Tipo<br>
+          <strong>Exemplo:</strong> ROI-2025-00010 ; ARO-2025-00010 ; 9836.001/2025-11 ; TAR-2025-0001 ; 123456789 ; João Silva ; 1234567 ; Nao ratifica a concessao ; Material
+        </div>
+        <textarea id="csv-input" rows="10"
+          placeholder="ROI;ARO;Prot. Supervisão;Prot. Tarefa;NB;Servidor;Matrícula;Parecer;Tipo&#10;ROI-2025-00010;ARO-2025-00010;9836.001/2025-11;TAR-2025-0001;123456789;João Silva;1234567;Nao ratifica a concessao;Material"
+          style="width:100%;font-family:monospace;font-size:13px;padding:.6rem;border:1px solid var(--border,#cbd5e1);border-radius:var(--radius);resize:vertical"></textarea>
+        <div style="display:flex;gap:.5rem;margin:.6rem 0;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" id="btn-csv-processar">➕ Processar Dados</button>
+          <button class="btn btn-secondary btn-sm" id="btn-csv-limpar">🧹 Limpar</button>
+          <span id="csv-contador-realtime" style="font-size:12px;color:var(--gray);margin-left:.5rem"></span>
+        </div>
+      </div>
+      <!-- ETAPA 2: revisão -->
+      <div id="csv-step-revisao" style="display:none">
+        <div id="csv-revisao-indicadores" style="display:flex;gap:1rem;margin-bottom:.75rem;font-size:13px;font-weight:600"></div>
+        <div style="overflow-x:auto">
+          <table id="csv-revisao-table" style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:var(--bg,#f1f5f9)">
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">#</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">ROI *</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">ARO</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Prot. Supervisão *</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Prot. Tarefa</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">NB</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Servidor *</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Matrícula</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Parecer *</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Tipo *</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap">Status</th>
+                <th style="padding:.4rem .5rem;text-align:left;white-space:nowrap"></th>
+              </tr>
+            </thead>
+            <tbody id="csv-revisao-tbody"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-csv-add-linha" style="margin-top:.6rem">+ Adicionar linha</button>
+        <button class="btn btn-secondary btn-sm" id="btn-csv-voltar" style="margin-top:.6rem">← Voltar ao texto</button>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn btn-secondary" id="btn-csv-fechar">Fechar</button>
+      <button class="btn btn-primary" id="btn-csv-confirmar" style="display:none">✓ Confirmar Criação</button>
     </div>
   </div>
 </div>
@@ -640,7 +733,7 @@ async function tentarLogin(perfil) {
     if (u.senha_hash !== hash) {
       hideLoading(); erroEl.textContent='Usuário ou senha incorretos.'; erroEl.style.display='block'; return;
     }
-    if (u.perfil !== perfil) {
+    if (perfil && u.perfil !== perfil) {
       hideLoading(); erroEl.textContent='Acesso negado. Use o botão correto para o seu perfil.'; erroEl.style.display='block'; return;
     }
     state.user = { id:u.id, nome:u.nome, username:u.username, perfil:u.perfil,
@@ -785,14 +878,11 @@ function abrirTrocarSenha() {
 }
 
 function logout() {
-  try { _supa.removeAllChannels(); } catch(e) {}
-  state.user = null;
-  state.rois = [];
-  roState.ros = [];
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
   document.getElementById('inp-username').value = '';
   document.getElementById('inp-senha').value    = '';
+  state.user = null;
 }
 
 // ═══════════════════════════════════════════
@@ -3063,7 +3153,7 @@ function gerarPDF(roiId) {
     doc.text(l, 22, y); y+=6;
   });
   doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(150);
-  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' — SESTRD', 105, 290, {align:'center'});
+  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' - DEMO SESTRD', 105, 290, {align:'center'});
   doc.save('Notificacao_'+roi.numero_roi+'_'+Date.now()+'.pdf');
   addLog(roi, 'PDF de notificacao gerado', 'Por: '+state.user.nome);
   toast('PDF gerado!');
@@ -3407,7 +3497,7 @@ function gerarPDFDespacho(roiId) {
   doc.setFont('helvetica','italic');
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' — SESTRD', 105, 290, {align:'center'});
+  doc.text('Gerado em '+new Date().toLocaleString('pt-BR')+' — DEMO SESTRD', 105, 290, {align:'center'});
 
   doc.save('Despacho_SEI_'+roi.numero_roi+'_'+Date.now()+'.pdf');
   addLog(roi, 'Despacho SEI gerado em PDF', 'Por: '+state.user.nome);
@@ -3728,15 +3818,185 @@ function salvarROI() {
 }
 
 // ═══════════════════════════════════════════
+// IMPORTAÇÃO POR TEXTO (PAT) — fila de revisão
+// ═══════════════════════════════════════════
+window._patQueue = [];
+
+var PAT_LABELS = [
+  {key:'nb',                   label:'NB / CTC / SDPA'},
+  {key:'protocolo_tarefa',     label:'Número do protocolo da tarefa a ser revisada'},
+  {key:'protocolo_supervisao', label:'Número do protocolo da tarefa de supervisão'},
+  {key:'matricula',            label:'Matrícula servidor responsável pela análise inicial a ser revista'},
+  {key:'origem_revisao',       label:'Origem da Revisão'},
+  {key:'revisao_instrucao',    label:'Revisão da Instrução Processual'},
+  {key:'revisao_direito',      label:'Revisão do Direito'}
+];
+var PAT_PARECER_OPTS = ['Ratifica a concessao com indicativo de revisao','Ratifica o indeferimento','Nao ratifica a concessao','Nao ratifica o indeferimento'];
+var PAT_TIPO_OPTS = ['Procedimental','Material','Procedimental e Material'];
+
+function patNorm(s){ return (s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+
+function patStripPrefix(line, label){
+  if(line.indexOf(label)===0) return line.slice(label.length);
+  // fallback tolerante a espaçamento/acentos
+  var esc = label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s*');
+  var m = line.match(new RegExp('^'+esc,'i'));
+  if(m) return line.slice(m[0].length);
+  // fallback por comprimento normalizado
+  return line.slice(label.length);
+}
+
+function parsePATText(raw){
+  var out = {};
+  (raw||'').split(/\r?\n/).forEach(function(line){
+    var t = line.trim();
+    if(!t) return;
+    var nt = patNorm(t), best = null, bestLen = 0;
+    PAT_LABELS.forEach(function(L){
+      var nl = patNorm(L.label);
+      if(nt.indexOf(nl)===0 && nl.length > bestLen){ best = L; bestLen = nl.length; }
+    });
+    if(best){ out[best.key] = patStripPrefix(t, best.label).trim(); }
+  });
+  return out;
+}
+
+function patExtrair(){
+  var raw = document.getElementById('pat-input').value;
+  if(!raw.trim()){ toast('⚠ Cole o texto da tarefa PAT primeiro'); return; }
+  var p = parsePATText(raw);
+  var achou = ['protocolo_supervisao','protocolo_tarefa','nb','matricula'].some(function(k){ return p[k]; });
+  if(!achou){ toast('⚠ Nenhum campo reconhecido. Verifique se colou o bloco "Campos Adicionais".'); return; }
+  window._patQueue.push({
+    numero_roi:'', numero_aro:'', nome_servidor:'', parecer:'', tipo_revisao:'',
+    protocolo_supervisao: p.protocolo_supervisao||'',
+    protocolo_tarefa: p.protocolo_tarefa||'',
+    nb: p.nb||'', matricula: p.matricula||'',
+    origem_revisao: p.origem_revisao||'', revisao_instrucao: p.revisao_instrucao||'', revisao_direito: p.revisao_direito||'',
+    data_notificacao:''
+  });
+  document.getElementById('pat-input').value='';
+  renderPATQueue();
+  toast('✓ Tarefa adicionada à fila ('+window._patQueue.length+')');
+}
+
+function patSet(i, field, val){ if(window._patQueue[i]) window._patQueue[i][field] = val; if(['numero_roi','nome_servidor','parecer','tipo_revisao'].indexOf(field)>=0) renderPATQueue(); }
+function patRemove(i){ window._patQueue.splice(i,1); renderPATQueue(); }
+function patLimparFila(){ window._patQueue = []; renderPATQueue(); }
+
+function patEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderPATQueue(){
+  var box = document.getElementById('pat-queue');
+  if(!box) return;
+  var q = window._patQueue;
+  if(!q.length){ box.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:1rem;font-size:13px">Fila vazia — extraia ao menos uma tarefa.</div>'; return; }
+  var reqStyle = 'border:1px solid #cbd5e1;border-radius:6px;padding:.35rem .4rem;font-size:12px;width:100%';
+  var missStyle = 'border:1.5px solid #dc2626;background:#fef2f2;border-radius:6px;padding:.35rem .4rem;font-size:12px;width:100%';
+  function inp(i,f,ph){ var v=q[i][f]||''; return '<input value="'+patEsc(v)+'" placeholder="'+ph+'" oninput="patSet('+i+',\''+f+'\',this.value)" style="'+(v?reqStyle:missStyle)+'">'; }
+  function sel(i,f,opts){ var v=q[i][f]||''; var s='<select onchange="patSet('+i+',\''+f+'\',this.value)" style="'+(v?reqStyle:missStyle)+'"><option value="">Selecione...</option>';
+    opts.forEach(function(o){ s+='<option'+(o===v?' selected':'')+'>'+patEsc(o)+'</option>'; }); return s+'</select>'; }
+  function ro(i,f){ var v=q[i][f]||''; return '<input value="'+patEsc(v)+'" oninput="patSet('+i+',\''+f+'\',this.value)" style="'+reqStyle+';background:#f8fafc">'; }
+  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1100px">';
+  h += '<thead><tr style="background:#f1f5f9;text-align:left">'
+     + ['#','Nº ROI *','Nº ARO','Servidor *','Parecer *','Tipo *','Prot. Sup. *','Prot. Revisada','NB','Matríc.','Notif.','']
+       .map(function(c){ return '<th style="padding:.4rem;border-bottom:1px solid #e2e8f0;white-space:nowrap">'+c+'</th>'; }).join('')
+     + '</tr></thead><tbody>';
+  q.forEach(function(r,i){
+    h += '<tr style="border-bottom:1px solid #f1f5f9">'
+      + '<td style="padding:.3rem;color:#64748b">'+(i+1)+'</td>'
+      + '<td style="padding:.3rem;min-width:120px">'+inp(i,'numero_roi','ROI-...')+'</td>'
+      + '<td style="padding:.3rem;min-width:120px">'+inp(i,'numero_aro','ARO-...').replace(missStyle,reqStyle)+'</td>'
+      + '<td style="padding:.3rem;min-width:130px">'+inp(i,'nome_servidor','Nome')+'</td>'
+      + '<td style="padding:.3rem;min-width:170px">'+sel(i,'parecer',PAT_PARECER_OPTS)+'</td>'
+      + '<td style="padding:.3rem;min-width:120px">'+sel(i,'tipo_revisao',PAT_TIPO_OPTS)+'</td>'
+      + '<td style="padding:.3rem;min-width:100px">'+ro(i,'protocolo_supervisao')+'</td>'
+      + '<td style="padding:.3rem;min-width:100px">'+ro(i,'protocolo_tarefa')+'</td>'
+      + '<td style="padding:.3rem;min-width:90px">'+ro(i,'nb')+'</td>'
+      + '<td style="padding:.3rem;min-width:80px">'+ro(i,'matricula')+'</td>'
+      + '<td style="padding:.3rem;min-width:130px"><input type="date" value="'+patEsc(r.data_notificacao)+'" oninput="patSet('+i+',\'data_notificacao\',this.value)" style="'+reqStyle+'"></td>'
+      + '<td style="padding:.3rem"><button class="btn btn-secondary btn-sm" onclick="patRemove('+i+')" title="Remover">✕</button></td>'
+      + '</tr>';
+  });
+  h += '</tbody></table></div>';
+  var faltam = q.filter(function(r){ return !(r.numero_roi&&r.nome_servidor&&r.parecer&&r.tipo_revisao&&r.protocolo_supervisao); }).length;
+  h += '<div style="margin-top:.5rem;font-size:12px;color:'+(faltam?'#dc2626':'#16a34a')+'">'
+     + (faltam? '⚠ '+faltam+' ROI(s) com campos obrigatórios faltando (destacados em vermelho).' : '✓ Todas as ROIs prontas para confirmação.')
+     + '</div>';
+  box.innerHTML = h;
+}
+
+function confirmarLotePAT(){
+  var q = window._patQueue;
+  if(!q.length){ toast('⚠ Fila vazia'); return; }
+  // Validação de obrigatórios
+  for(var i=0;i<q.length;i++){
+    var r=q[i];
+    if(!(r.numero_roi&&r.nome_servidor&&r.parecer&&r.tipo_revisao&&r.protocolo_supervisao)){
+      toast('⚠ ROI #'+(i+1)+': preencha os campos obrigatórios (*)'); return;
+    }
+  }
+  // Duplicatas (no banco e dentro da própria fila)
+  var vistosROI={}, vistosARO={};
+  for(var j=0;j<q.length;j++){
+    var roi=q[j].numero_roi.trim(), aro=(q[j].numero_aro||'').trim();
+    if(state.rois.find(function(x){ return x.numero_roi===roi; }) || vistosROI[roi]){ toast('⚠ Nº ROI duplicado: '+roi); return; }
+    vistosROI[roi]=1;
+    if(aro){ if(state.rois.find(function(x){ return x.numero_aro===aro; }) || vistosARO[aro]){ toast('⚠ Nº ARO duplicado: '+aro); return; } vistosARO[aro]=1; }
+  }
+  // Criação
+  var criadas=0;
+  q.forEach(function(r){
+    var dataN = r.data_notificacao||'';
+    var limARO = dataN ? fmtISO(addWD(new Date(dataN),5)) : '';
+    var novaROI = {
+      id: r.numero_roi, numero_roi: r.numero_roi,
+      numero_aro: (r.numero_aro||'').trim(),
+      protocolo_supervisao: r.protocolo_supervisao,
+      protocolo_tarefa: r.protocolo_tarefa||'',
+      parecer: r.parecer, tipo_revisao: r.tipo_revisao,
+      nb: r.nb||'',
+      data_criacao: fmtISO(new Date()),
+      origem_revisao: r.origem_revisao||'', revisao_instrucao: r.revisao_instrucao||'', revisao_direito: r.revisao_direito||'',
+      status:'Pendente', notificador: state.user.nome,
+      aro:{
+        nome_servidor: r.nome_servidor,
+        matricula: r.matricula||'',
+        nome_interessado:'', cpf_interessado:'',
+        data_notificacao: dataN, data_limite: limARO,
+        status:'Pendente', etapa:'Aguardando resposta'
+      },
+      sei:null,
+      logs:[{ts:new Date().toISOString(), user:state.user.nome, acao:'ROI criada (importação PAT)', detalhe:''}]
+    };
+    state.rois.unshift(novaROI); saveSingle(novaROI); criadas++;
+  });
+  window._patQueue=[];
+  closePATModal();
+  toast('✓ '+criadas+' ROI(s) criada(s) com sucesso!');
+  showView('rois');
+}
+
+function openPATModal(){ document.getElementById('pat-input').value=''; renderPATQueue(); document.getElementById('modal-pat').style.display='flex'; }
+function closePATModal(){ document.getElementById('modal-pat').style.display='none'; }
+
+// ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
-document.getElementById('btn-notificador').addEventListener('click', function(){ tentarLogin('notificador'); });
-document.getElementById('btn-chefia').addEventListener('click', function(){ tentarLogin('chefia'); });
+// login via onclick nos botoes btn-notificador / btn-chefia
+document.getElementById('inp-senha') && document.getElementById('inp-senha').addEventListener('keydown', function(e){ if(e.key==='Enter') tentarLogin(); });
 document.getElementById('btn-logout').addEventListener('click', logout);
 document.getElementById('btn-nova-roi').addEventListener('click', openModal);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 document.getElementById('btn-save-modal').addEventListener('click', salvarROI);
+document.getElementById('btn-importar-pat').addEventListener('click', openPATModal);
+document.getElementById('btn-close-pat').addEventListener('click', closePATModal);
+document.getElementById('btn-cancel-pat').addEventListener('click', closePATModal);
+document.getElementById('btn-pat-extrair').addEventListener('click', patExtrair);
+document.getElementById('btn-pat-limpar-input').addEventListener('click', function(){ document.getElementById('pat-input').value=''; });
+document.getElementById('btn-pat-limpar-fila').addEventListener('click', patLimparFila);
+document.getElementById('btn-confirmar-pat').addEventListener('click', confirmarLotePAT);
 document.querySelectorAll('.nav-item').forEach(function(n) {
   n.addEventListener('click', function(){ showView(n.getAttribute('data-view')); });
 });
@@ -3744,6 +4004,250 @@ document.getElementById('f-data-notif').addEventListener('change', function() {
   var v = this.value;
   document.getElementById('f-data-limite').value = v ? fmtISO(addWD(new Date(v), 5)) : '';
 });
+
+// ═══════════════════════════════════════════
+// IMPORTAÇÃO EM LOTE CSV
+// ═══════════════════════════════════════════
+var CSV_PARECER_OPTS = [
+  'Ratifica a concessao com indicativo de revisao',
+  'Ratifica o indeferimento',
+  'Nao ratifica a concessao',
+  'Nao ratifica o indeferimento'
+];
+var CSV_TIPO_OPTS = ['Procedimental','Material','Procedimental e Material'];
+var _csvLote = [];
+
+function abrirModalCSV() {
+  _csvLote = [];
+  var el = document.getElementById('csv-input');
+  if (el) el.value = '';
+  var stepInput = document.getElementById('csv-step-input');
+  var stepRevisao = document.getElementById('csv-step-revisao');
+  var btnConf = document.getElementById('btn-csv-confirmar');
+  if (stepInput) stepInput.style.display = 'block';
+  if (stepRevisao) stepRevisao.style.display = 'none';
+  if (btnConf) btnConf.style.display = 'none';
+  document.getElementById('modal-csv').style.display = 'flex';
+  atualizarContadorCSV();
+}
+
+function atualizarContadorCSV() {
+  var el = document.getElementById('csv-input');
+  var cnt = document.getElementById('csv-contador-realtime');
+  if (!el || !cnt) return;
+  var linhas = el.value.split('\n').filter(function(l){ return l.trim(); });
+  var validas = linhas.filter(function(l){ return !isHeaderCSV(l); });
+  cnt.textContent = validas.length ? validas.length + ' linha(s) detectada(s)' : '';
+}
+
+function isHeaderCSV(linha) {
+  var norm = linha.toLowerCase().replace(/[\s;]/g,'');
+  return (norm.indexOf('roi') === 0 || norm.indexOf('numero') === 0) &&
+         (norm.indexOf('aro') !== -1 || norm.indexOf('prot') !== -1 || norm.indexOf('serv') !== -1);
+}
+
+function parsearCSV(texto) {
+  var linhas = (texto||'').split(/\r?\n/).filter(function(l){ return l.trim(); });
+  var resultado = [];
+  linhas.forEach(function(linha, idx) {
+    if (isHeaderCSV(linha)) return;
+    var cols = linha.split(';').map(function(c){ return c.trim(); });
+    var item = {
+      _linha: idx + 1,
+      numero_roi:           cols[0] || '',
+      numero_aro:           cols[1] || '',
+      protocolo_supervisao: cols[2] || '',
+      protocolo_tarefa:     cols[3] || '',
+      nb:                   cols[4] || '',
+      nome_servidor:        cols[5] || '',
+      matricula:            cols[6] || '',
+      parecer:              cols[7] || '',
+      tipo_revisao:         cols[8] || ''
+    };
+    item._erros = validarItemCSV(item);
+    item._valido = item._erros.length === 0;
+    resultado.push(item);
+  });
+  return resultado;
+}
+
+function validarItemCSV(item) {
+  var erros = [];
+  if (!item.numero_roi)           erros.push('ROI obrigatório');
+  if (!item.protocolo_supervisao) erros.push('Prot. Supervisão obrigatório');
+  if (!item.nome_servidor)        erros.push('Servidor obrigatório');
+  if (!item.parecer)              erros.push('Parecer obrigatório');
+  if (!item.tipo_revisao)         erros.push('Tipo obrigatório');
+  if (item.numero_roi && state.rois.find(function(r){ return r.numero_roi === item.numero_roi; }))
+    erros.push('ROI já existe');
+  return erros;
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderRevisaoCSV() {
+  var validos = _csvLote.filter(function(i){ return i._valido; }).length;
+  var errados = _csvLote.length - validos;
+
+  var indEl = document.getElementById('csv-revisao-indicadores');
+  if (indEl) {
+    indEl.innerHTML =
+      '<span style="color:var(--green)">✅ ' + validos + ' válido(s)</span>' +
+      (errados ? '&nbsp;&nbsp;<span style="color:var(--red)">❌ ' + errados + ' com erro</span>' : '');
+  }
+
+  var tbody = document.getElementById('csv-revisao-tbody');
+  if (!tbody) return;
+
+  function mkInput(field, val, idx) {
+    return '<input data-idx="' + idx + '" data-field="' + field + '" value="' + escHtml(val) +
+           '" style="width:100%;min-width:70px;padding:.2rem .3rem;border:1px solid var(--gray-bd);border-radius:4px;font-size:12px">';
+  }
+  function mkSelect(field, val, opts, idx) {
+    var options = '<option value="">—</option>' + opts.map(function(o){
+      return '<option' + (o === val ? ' selected' : '') + '>' + escHtml(o) + '</option>';
+    }).join('');
+    return '<select data-idx="' + idx + '" data-field="' + field +
+           '" style="width:100%;min-width:90px;padding:.2rem .3rem;border:1px solid var(--gray-bd);border-radius:4px;font-size:12px">' + options + '</select>';
+  }
+
+  tbody.innerHTML = _csvLote.map(function(item, idx) {
+    var rowBg = item._valido ? '' : 'background:#fff5f5';
+    var statusCell = item._valido
+      ? '<span style="color:var(--green);font-size:12px;white-space:nowrap">✅ Válido</span>'
+      : '<span style="color:var(--red);font-size:12px;white-space:nowrap">❌ Erro</span>' +
+        '<div style="color:var(--red);font-size:11px;margin-top:2px">' + item._erros.join('<br>') + '</div>';
+
+    return '<tr style="' + rowBg + ';border-bottom:1px solid var(--gray-bd)">' +
+      '<td style="padding:.3rem .4rem;color:var(--gray);font-size:12px">' + item._linha + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('numero_roi', item.numero_roi, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('numero_aro', item.numero_aro, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('protocolo_supervisao', item.protocolo_supervisao, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('protocolo_tarefa', item.protocolo_tarefa, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('nb', item.nb, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('nome_servidor', item.nome_servidor, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkInput('matricula', item.matricula, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkSelect('parecer', item.parecer, CSV_PARECER_OPTS, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + mkSelect('tipo_revisao', item.tipo_revisao, CSV_TIPO_OPTS, idx) + '</td>' +
+      '<td style="padding:.3rem .4rem">' + statusCell + '</td>' +
+      '<td style="padding:.3rem .4rem"><button onclick="csvRemoverLinha(' + idx + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px" title="Remover">🗑</button></td>' +
+    '</tr>';
+  }).join('');
+
+  var btnConf = document.getElementById('btn-csv-confirmar');
+  if (btnConf) btnConf.style.display = validos > 0 ? 'inline-flex' : 'none';
+}
+
+function csvRemoverLinha(idx) {
+  _csvLote.splice(idx, 1);
+  _csvLote.forEach(function(item){
+    item._erros = validarItemCSV(item);
+    item._valido = item._erros.length === 0;
+  });
+  renderRevisaoCSV();
+}
+
+function csvAdicionarLinha() {
+  var novo = { _linha: _csvLote.length + 1, numero_roi:'', numero_aro:'', protocolo_supervisao:'',
+    protocolo_tarefa:'', nb:'', nome_servidor:'', matricula:'', parecer:'', tipo_revisao:'' };
+  novo._erros = validarItemCSV(novo);
+  novo._valido = false;
+  _csvLote.push(novo);
+  renderRevisaoCSV();
+  var tbody = document.getElementById('csv-revisao-tbody');
+  if (tbody && tbody.lastElementChild) tbody.lastElementChild.scrollIntoView({behavior:'smooth'});
+}
+
+function csvCampoEditado(e) {
+  var t = e.target;
+  var idx = parseInt(t.getAttribute('data-idx'));
+  var field = t.getAttribute('data-field');
+  if (isNaN(idx) || !field || !_csvLote[idx]) return;
+  _csvLote[idx][field] = t.value.trim();
+  _csvLote[idx]._erros = validarItemCSV(_csvLote[idx]);
+  _csvLote[idx]._valido = _csvLote[idx]._erros.length === 0;
+  renderRevisaoCSV();
+}
+
+async function confirmarLoteCSV() {
+  var validos = _csvLote.filter(function(i){ return i._valido; });
+  if (!validos.length) { toast('Nenhum registro válido para criar.'); return; }
+  var btnConf = document.getElementById('btn-csv-confirmar');
+  if (btnConf) { btnConf.disabled = true; btnConf.textContent = 'Salvando...'; }
+  showLoading('Criando ROIs em lote...');
+  var ok = 0, erros = [];
+  for (var i = 0; i < validos.length; i++) {
+    var item = validos[i];
+    try {
+      var novaROI = {
+        id: item.numero_roi,
+        numero_roi: item.numero_roi,
+        numero_aro: item.numero_aro,
+        protocolo_supervisao: item.protocolo_supervisao,
+        protocolo_tarefa: item.protocolo_tarefa,
+        nb: item.nb,
+        parecer: item.parecer,
+        tipo_revisao: item.tipo_revisao,
+        data_criacao: fmtISO(new Date()),
+        status: 'Pendente',
+        notificador: state.user ? state.user.nome : '',
+        aro: {
+          nome_servidor: item.nome_servidor,
+          matricula: item.matricula,
+          status: 'Pendente',
+          etapa: 'Aguardando resposta'
+        },
+        sei: null,
+        logs: [{ ts: new Date().toISOString(),
+                 user: state.user ? state.user.nome : '—',
+                 acao: 'ROI criada via importação CSV em lote', detalhe: '' }]
+      };
+      state.rois.unshift(novaROI);
+      await saveSingle(novaROI);
+      ok++;
+    } catch(e) {
+      erros.push(item.numero_roi + ': ' + (e.message||'erro'));
+    }
+  }
+  hideLoading();
+  if (btnConf) { btnConf.disabled = false; btnConf.textContent = '✓ Confirmar Criação'; }
+  document.getElementById('modal-csv').style.display = 'none';
+  _csvLote = [];
+  var msg = '✅ ' + ok + ' ROI(s) criada(s) com sucesso!';
+  if (erros.length) msg += ' | ⚠ Falhas: ' + erros.join(', ');
+  toast(msg);
+  renderROIs();
+}
+
+// ── Wiring do modal CSV ──
+document.getElementById('btn-importar-csv').addEventListener('click', function(){ abrirModalCSV(); });
+document.getElementById('btn-close-csv').addEventListener('click', function(){ document.getElementById('modal-csv').style.display='none'; });
+document.getElementById('btn-csv-fechar').addEventListener('click', function(){ document.getElementById('modal-csv').style.display='none'; });
+document.getElementById('btn-csv-processar').addEventListener('click', function(){
+  var texto = (document.getElementById('csv-input')||{}).value || '';
+  if (!texto.trim()) { toast('Cole os dados primeiro.'); return; }
+  _csvLote = parsearCSV(texto);
+  if (!_csvLote.length) { toast('Nenhum dado encontrado. Verifique o formato.'); return; }
+  document.getElementById('csv-step-input').style.display = 'none';
+  document.getElementById('csv-step-revisao').style.display = 'block';
+  renderRevisaoCSV();
+});
+document.getElementById('btn-csv-limpar').addEventListener('click', function(){
+  var el = document.getElementById('csv-input'); if (el) el.value = '';
+  atualizarContadorCSV();
+});
+document.getElementById('btn-csv-add-linha').addEventListener('click', csvAdicionarLinha);
+document.getElementById('btn-csv-voltar').addEventListener('click', function(){
+  document.getElementById('csv-step-input').style.display = 'block';
+  document.getElementById('csv-step-revisao').style.display = 'none';
+  document.getElementById('btn-csv-confirmar').style.display = 'none';
+});
+document.getElementById('btn-csv-confirmar').addEventListener('click', confirmarLoteCSV);
+document.getElementById('csv-input').addEventListener('input', atualizarContadorCSV);
+document.getElementById('csv-revisao-table').addEventListener('change', csvCampoEditado);
+document.getElementById('csv-revisao-table').addEventListener('input',  csvCampoEditado);
 </script>
 </body>
 </html>
