@@ -247,10 +247,10 @@ textarea{resize:vertical;min-height:90px}
         <div class="form-group full"><label>Parecer *</label>
           <select id="f-parecer">
             <option value="">Selecione...</option>
-            <option>Ratifica a concessao com indicativo de revisao</option>
-            <option>Ratifica o indeferimento</option>
-            <option>Nao ratifica a concessao</option>
-            <option>Nao ratifica o indeferimento</option>
+            <option value="Ratifica a concessao com indicativo de revisao">Ratifica a concessão com indicativo de revisão</option>
+            <option value="Ratifica o indeferimento">Ratifica o indeferimento</option>
+            <option value="Nao ratifica a concessao">Não ratifica a concessão</option>
+            <option value="Nao ratifica o indeferimento">Não ratifica o indeferimento</option>
           </select>
         </div>
         <div class="form-group"><label>Tipo de Revisão *</label>
@@ -1360,7 +1360,7 @@ function renderDetail(roiId) {
   h += '<div class="detail-grid">';
   h += '<div class="detail-field"><div class="detail-lbl">Protocolo Supervisao</div><input class="edit-roi-field mono" data-campo="protocolo_supervisao" value="'+(roi.protocolo_supervisao||'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
   h += '<div class="detail-field"><div class="detail-lbl">Protocolo Tarefa</div><input class="edit-roi-field mono" data-campo="protocolo_tarefa" value="'+(roi.protocolo_tarefa||'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
-  h += '<div class="detail-field full"><div class="detail-lbl">Parecer</div><select class="edit-roi-field" data-campo="parecer" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"><option value="Ratifica a concessao com indicativo de revisao"'+(roi.parecer==='Ratifica a concessao com indicativo de revisao'?' selected':'')+'>Ratifica a concessao com indicativo de revisao</option><option value="Ratifica o indeferimento"'+(roi.parecer==='Ratifica o indeferimento'?' selected':'')+'>Ratifica o indeferimento</option><option value="Nao ratifica a concessao"'+(roi.parecer==='Nao ratifica a concessao'?' selected':'')+'>Nao ratifica a concessao</option><option value="Nao ratifica o indeferimento"'+(roi.parecer==='Nao ratifica o indeferimento'?' selected':'')+'>Nao ratifica o indeferimento</option></select></div>';
+  h += '<div class="detail-field full"><div class="detail-lbl">Parecer</div><select class="edit-roi-field" data-campo="parecer" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"><option value="Ratifica a concessao com indicativo de revisao"'+(roi.parecer==='Ratifica a concessao com indicativo de revisao'?' selected':'')+'>Ratifica a concessão com indicativo de revisão</option><option value="Ratifica o indeferimento"'+(roi.parecer==='Ratifica o indeferimento'?' selected':'')+'>Ratifica o indeferimento</option><option value="Nao ratifica a concessao"'+(roi.parecer==='Nao ratifica a concessao'?' selected':'')+'>Não ratifica a concessão</option><option value="Nao ratifica o indeferimento"'+(roi.parecer==='Nao ratifica o indeferimento'?' selected':'')+'>Não ratifica o indeferimento</option></select></div>';
   h += '<div class="detail-field"><div class="detail-lbl">Tipo de Revisao</div><select class="edit-roi-field" data-campo="tipo_revisao" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"><option'+(roi.tipo_revisao==='Procedimental'?' selected':'')+'>Procedimental</option><option'+(roi.tipo_revisao==='Material'?' selected':'')+'>Material</option><option'+(roi.tipo_revisao==='Procedimental e Material'?' selected':'')+'>Procedimental e Material</option></select></div>';
   h += '<div class="detail-field"><div class="detail-lbl">Numero da ARO</div><input class="edit-roi-field mono" data-campo="numero_aro" value="'+(roi.numero_aro||'')+'" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
   h += '<div class="detail-field"><div class="detail-lbl">NB</div><input class="edit-roi-field" data-campo="nb" value="'+(roi.nb||'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;width:100%"></div>';
@@ -3184,8 +3184,18 @@ function renderLog() {
 // ═══════════════════════════════════════════
 // NOTIFICACAO / PDF
 // ═══════════════════════════════════════════
+function pareceComAcento(v){
+  var m={
+    'Ratifica a concessao com indicativo de revisao':'Ratifica a concessão com indicativo de revisão',
+    'Ratifica o indeferimento':'Ratifica o indeferimento',
+    'Nao ratifica a concessao':'Não ratifica a concessão',
+    'Nao ratifica o indeferimento':'Não ratifica o indeferimento'
+  };
+  return (v && m[v]) ? m[v] : (v||'');
+}
 function getTexto(roi) {
-  var p = roi.parecer.charAt(0).toLowerCase()+roi.parecer.slice(1);
+  var pa = pareceComAcento(roi.parecer);
+  var p = pa.charAt(0).toLowerCase()+pa.slice(1);
   var t = roi.tipo_revisao.toLowerCase();
   var NB   = roi.nb || '__________';
   var PTAR = roi.protocolo_tarefa || '__________';
@@ -3196,7 +3206,7 @@ function getTexto(roi) {
     '',
     'Em razão da conclusão da Supervisão Técnica, foi cadastrada a Revisão de Ofício Identificada (ROI) n. '+roi.numero_roi+', cuja responsabilidade foi atribuída a Vossa Senhoria, nos termos da Portaria mencionada.',
     '',
-    'Comunicamos que o prazo para análise e adoção de providências, com a consequente conclusão da ROI, é de 10 (dez) dias úteis, contados a partir da data do envio deste e-mail.',
+    'Comunicamos que o prazo para análise e adoção de providências, com a consequente conclusão da ROI, é de 5 (cinco) dias úteis, contados a partir da data do envio deste e-mail.',
     '',
     'Esclarecemos que, em caso de dúvida técnica, Vossa Senhoria poderá cadastrar uma subtarefa de Suporte Técnico - RD, vinculada à respectiva ROI.',
     '',
@@ -3499,7 +3509,7 @@ function getTextoDespacho(roi) {
   var aroNum = roi.numero_aro                      ? roi.numero_aro           : '[NUMERO ARO]';
   var dtCria = roi.data_criacao                    ? fmtBR(roi.data_criacao)  : '[DATA CRIACAO ROI]';
   var dtNoti = roi.aro && roi.aro.data_notificacao ? fmtBR(roi.aro.data_notificacao) : '[DATA NOTIFICACAO]';
-  var parecer= roi.parecer                         ? roi.parecer              : '[PARECER]';
+  var parecer= roi.parecer                         ? pareceComAcento(roi.parecer) : '[PARECER]';
 
   var lines = [
     'MODELO DE DESPACHO PARA SEI',
@@ -3510,7 +3520,7 @@ function getTextoDespacho(roi) {
     '',
     '1.2 A Supervisão Técnica n. '+supTec+' '+parecer.toLowerCase()+' do protocolo '+protar+', NB '+nb+', requerido por '+interes+'.',
     '',
-    '2. Nos termos do art. 117, IV, da Lei 8.112/1990, ao servidor é proibido opor resistência injustificada ao andamento de documento e processo ou execução de serviço, a qual, no âmbito da supervisão técnica deve ser apurada conforme descrito no Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
+    '2. Nos termos do art. 117, IV, da Lei 8.112/1990, ao servidor é proibido opor resistência injustificada ao andamento de documento e processo ou execução de serviço, a qual, no âmbito da supervisão técnica, deve ser apurada conforme descrito no Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
     '2.1 Desta forma, cadastra-se o presente processo SEI, para fins de análise da autoria e tipificação da conduta de resistência injustificada, conforme exposto a seguir:',
     '',
@@ -3534,7 +3544,7 @@ function getTextoDespacho(roi) {
     '',
     'b) Serviço de Gestão dos Canais de Atendimento - SGCA, para efetuar bloqueio cautelar nas caixas ordinária e extraordinária, pelo prazo de cinco dias úteis, para que seja priorizada a conclusão da ROI, consignando nos autos a efetivação da ação, bem como o desbloqueio do acesso, conforme o caso;',
     '',
-    'c) Seção de Análise de Reconhecimento de Direitos - SARD para ciência e acompanhamento, haja vista competência prevista no art. 33, §11, "IV", da Portaria DIRBEN/INSS n. 1.309/2025.',
+    'c) Seção de Análise de Reconhecimento de Direitos - SARD, para ciência e acompanhamento, haja vista competência prevista no art. 33, §11, "IV", da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
     '7. Após a remessa dos autos, notifique-se o servidor acerca da instauração do presente procedimento.'
   ];
