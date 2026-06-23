@@ -265,7 +265,7 @@ textarea{resize:vertical;min-height:90px}
         <div class="form-group"><label>Matrícula</label><input id="f-matricula"></div>
         <div class="form-group"><label>Nome Interessado</label><input id="f-nome-int"></div>
         <div class="form-group"><label>CPF Interessado</label><input id="f-cpf" placeholder="000.000.000-00"></div>
-        <div class="form-group"><label>Data Limite ARO (auto: notif +5 d.u. — editável)</label><input type="date" id="f-data-limite"></div>
+        <div class="form-group"><label>Data Limite ARO (auto: notif +10 d.u. — editável)</label><input type="date" id="f-data-limite"></div>
       </div>
     </div>
     <div class="modal-ftr">
@@ -1316,6 +1316,9 @@ function renderDetail(roiId) {
   h += '<button class="btn btn-primary btn-sm" onclick="showView(\'notificacao\',\''+roi.id+'\')" >✉ Gerar Notificacao</button>';
   var nComROI = roi.comentarios_roi ? roi.comentarios_roi.length : 0;
   h += '<button class="btn btn-secondary btn-sm" onclick="abrirComentariosROI(\''+roi.id+'\')">💬 Comentarios'+(nComROI>0?' ('+nComROI+')':'')+'</button>';
+  var nAnexos = roi.anexos ? roi.anexos.length : 0;
+  h += '<input type="file" id="file-notif-'+roi.id+'" accept="application/pdf" style="display:none" onchange="uploadNotificacao(\''+roi.id+'\', this)">';
+  h += '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'file-notif-'+roi.id+'\').click()">📎 Anexar Notificação'+(nAnexos>0?' ('+nAnexos+')':'')+'</button>';
   if (getColor(roi)==='r') {
     h += '<button class="btn btn-sm" style="background:var(--red-lt);color:var(--red)" onclick="showView(\'despacho\',\''+roi.id+'\')" >⚖ Gerar Despacho SEI</button>';
   }
@@ -1333,6 +1336,20 @@ function renderDetail(roiId) {
     h += '<button class="btn btn-sm" style="background:var(--roxo-lt);color:var(--roxo)" onclick="reativarROI(\''+roi.id+'\')" >🔄 Reativar</button>';
   }
   h += '</div>';
+
+  // Anexos (notificacoes enviadas)
+  if (roi.anexos && roi.anexos.length) {
+    h += '<div class="card" style="margin-bottom:1rem;padding:.75rem 1rem">';
+    h += '<div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">📎 Notificações anexadas</div>';
+    roi.anexos.forEach(function(a, i){
+      h += '<div style="display:flex;align-items:center;gap:.5rem;font-size:12.5px;padding:.25rem 0">';
+      h += '<a href="'+(a.url||'#')+'" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">📄 '+a.nome+'</a>';
+      h += '<span style="color:var(--gray);font-size:11px">'+(a.ts?new Date(a.ts).toLocaleString('pt-BR'):'')+(a.user?' — '+a.user:'')+'</span>';
+      h += '<span title="Remover" style="cursor:pointer;color:var(--red);margin-left:auto" onclick="removerAnexo(\''+roi.id+'\','+i+')">🗑</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
 
   // Card ROI
   h += '<div class="card" style="margin-bottom:1rem">';
@@ -1365,7 +1382,7 @@ function renderDetail(roiId) {
   // Data notificacao editavel
   h += '<div class="detail-field"><div class="detail-lbl">Data Notificacao ARO</div>';
   h += '<input type="date" value="'+(roi.aro&&roi.aro.data_notificacao?roi.aro.data_notificacao:'')+'" data-action="edit-notif" data-id="'+roi.id+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
-  h += '<div class="detail-field"><div class="detail-lbl">Data Limite ARO (+5 d.u.)</div><input type="date" class="edit-aro-field" data-campo="data_limite" value="'+(roi.aro&&roi.aro.data_limite?roi.aro.data_limite:'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
+  h += '<div class="detail-field"><div class="detail-lbl">Data Limite ARO (+10 d.u.)</div><input type="date" class="edit-aro-field" data-campo="data_limite" value="'+(roi.aro&&roi.aro.data_limite?roi.aro.data_limite:'')+'" style="font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:165px"></div>';
   h += '<div class="detail-field full"><div class="detail-lbl">Etapa Atual</div>';
   if (roi.status==='Pendente') {
     h += '<select data-action="etapa" data-id="'+roi.id+'" style="max-width:300px">';
@@ -1387,6 +1404,10 @@ function renderDetail(roiId) {
     h += '<span class="badge bz">'+(roi.aro&&roi.aro.etapa?roi.aro.etapa:'—')+'</span>';
   }
   h += '</div>';
+  if (roi.aro && roi.aro.etapa === 'Processo em Fase de RO') {
+    h += '<div class="detail-field full"><div class="detail-lbl" style="color:var(--blue)">Número da RO (Revisão de Ofício)</div>';
+    h += '<input data-action="aro-numero-ro" data-id="'+roi.id+'" value="'+(roi.aro&&roi.aro.numero_ro?roi.aro.numero_ro:'')+'" placeholder="9836.000000/2025-00" style="font-family:var(--mono);font-size:13px;padding:.3rem .6rem;border:1px solid var(--gray-bd);border-radius:6px;max-width:300px"></div>';
+  }
   h += '<div style="margin-top:.75rem;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="salvarEdicaoARO(\''+roi.id+'\')">💾 Salvar Dados ARO</button></div>';
   h += '</div></div>';
 
@@ -1401,10 +1422,16 @@ function renderDetail(roiId) {
   h += '<input value="'+(roi.sei&&roi.sei.numero?roi.sei.numero:'')+'" placeholder="99999.000000/2025-00" data-action="sei-num" data-id="'+roi.id+'" style="font-family:var(--mono);font-size:13px"></div>';
   h += '<div class="form-group"><label>Data de Abertura do SEI</label>';
   h += '<input type="date" value="'+(roi.sei&&roi.sei.data_abertura?roi.sei.data_abertura:'')+'" data-action="sei-data" data-id="'+roi.id+'"></div>';
-  h += '<div class="form-group"><label>Data Limite SEI (+10 dias uteis)</label>';
-  h += '<input type="date" value="'+(roi.sei&&roi.sei.data_limite?roi.sei.data_limite:'')+'" readonly></div>';
+  h += '<div class="form-group"><label>Data Limite SEI (+10 dias uteis — editavel)'+((roi.sei&&roi.sei.limite_manual)?' <span style="color:var(--roxo);font-size:10px">manual</span>':'')+'</label>';
+  h += '<input type="date" value="'+(roi.sei&&roi.sei.data_limite?roi.sei.data_limite:'')+'" data-action="sei-limite-manual" data-id="'+roi.id+'" title="Editavel — sobrepoe o calculo automatico de forma permanente"></div>';
   h += '<div class="form-group"><label>Enc. p/ SRID/COBEN</label>';
   h += '<input type="date" id="f-data-srid" value="'+(roi.data_srid_coben||'')+'" data-action="srid-data" data-id="'+roi.id+'" title="Data de encaminhamento para SRID/COBEN"></div>';
+  h += '<div class="form-group"><label>Manifestação SGCA em</label>';
+  h += '<input type="date" value="'+(roi.sei&&roi.sei.manif_sgca?roi.sei.manif_sgca:'')+'" data-action="sei-manif" data-campo="manif_sgca" data-id="'+roi.id+'"></div>';
+  h += '<div class="form-group"><label>Manifestação SARD em</label>';
+  h += '<input type="date" value="'+(roi.sei&&roi.sei.manif_sard?roi.sei.manif_sard:'')+'" data-action="sei-manif" data-campo="manif_sard" data-id="'+roi.id+'"></div>';
+  h += '<div class="form-group"><label>Manifestação chefia imediata em</label>';
+  h += '<input type="date" value="'+(roi.sei&&roi.sei.manif_chefia?roi.sei.manif_chefia:'')+'" data-action="sei-manif" data-campo="manif_chefia" data-id="'+roi.id+'"></div>';
   h += '<div class="form-group" style="justify-content:flex-end;align-items:flex-end">';
   h += (roi.sei&&roi.sei.numero?'<span style="font-size:12.5px;color:var(--roxo)">🟣 Processo registrado</span>':'<span style="font-size:12.5px;color:var(--gray)">Preencha para registrar</span>');
   if (roi.data_srid_coben) {
@@ -1431,14 +1458,14 @@ function renderDetail(roiId) {
     h += '</div>';
 
     h += '<div style="background:var(--orange-lt);border-radius:var(--radius);padding:.65rem 1rem;margin-bottom:1rem;font-size:12.5px;color:var(--orange)">';
-    h += '⏸ Data Limite da ARO passa a ser a data de expiracao da exigencia (35 dias corridos). Semaforo segue essa data.';
+    h += '⏸ Data Limite da ARO passa a ser a data de expiracao da exigencia (35 dias corridos, ajustavel). Semaforo segue essa data.';
     h += '</div>';
 
     h += '<div class="form-grid">';
     h += '<div class="form-group"><label>Data de Envio da Exigencia</label>';
     h += '<input type="date" value="'+(roi.aro.exigencia_data_envio||'')+'" data-action="exig-data" data-id="'+roi.id+'"></div>';
-    h += '<div class="form-group"><label>Data Limite (+35 dias corridos)</label>';
-    h += '<input type="date" value="'+(roi.aro.exigencia_data_limite||'')+'" readonly></div>';
+    h += '<div class="form-group"><label>Data Limite (+35 dias corridos — editavel)'+(roi.aro.exigencia_limite_manual?' <span style="color:var(--orange);font-size:10px">manual</span>':'')+'</label>';
+    h += '<input type="date" value="'+(roi.aro.exigencia_data_limite||'')+'" data-action="exig-limite-manual" data-id="'+roi.id+'" title="Editavel — sobrepoe o calculo automatico de forma permanente"></div>';
 
     if (roi.aro.exigencia_data_limite) {
       h += '<div class="form-group full">';
@@ -1980,10 +2007,15 @@ function abrirComentarios(roId){
 
   if(coms.length){
     html += '<div class="log-list" style="margin-bottom:1rem;max-height:280px;overflow-y:auto">';
-    coms.slice().reverse().forEach(function(c){
+    var nC = coms.length;
+    coms.slice().reverse().forEach(function(c, ri){
+      var idx = nC-1-ri;
       html += '<div class="log-item">';
       html += '<div class="log-time">'+new Date(c.ts).toLocaleString('pt-BR')+'</div>';
-      html += '<div class="log-txt"><span class="log-user">'+c.user+'</span><br>'+c.texto+'</div>';
+      html += '<div class="log-txt"><span class="log-user">'+c.user+'</span>';
+      html += ' <span title="Editar comentario" style="cursor:pointer;color:var(--blue);font-size:11px" onclick="editarComentarioRO(\''+roId+'\','+idx+')">✏</span>';
+      if(c.editado_em) html += ' <span style="font-size:10px;color:var(--gray)" title="Editado">(editado)</span>';
+      html += '<br>'+c.texto+'</div>';
       html += '</div>';
     });
     html += '</div>';
@@ -2007,6 +2039,53 @@ function abrirComentarios(roId){
 function fecharComentarios(){
   var m = document.getElementById('modal-com');
   if(m) m.remove();
+}
+function editarComentarioRO(roId, idx){
+  var ro = roState.ros.find(function(r){ return r.id===roId; });
+  if(!ro || !ro.comentarios || !ro.comentarios[idx]) return;
+  var c = ro.comentarios[idx];
+  var nome = state.user ? state.user.nome : '—';
+  var ehChefia = state.user && state.user.perfil==='chefia';
+  if(!ehChefia && c.user !== nome){ toast('Apenas o autor ou a chefia podem editar este comentario.'); return; }
+  var novo = window.prompt('Editar comentario:', c.texto);
+  if(novo === null) return;
+  novo = novo.trim();
+  if(!novo){ toast('O comentario nao pode ficar vazio.'); return; }
+  if(novo === c.texto) return;
+  if(!c.historico) c.historico = [];
+  c.historico.push({ texto_anterior:c.texto, ts:new Date().toISOString(), user:nome });
+  var antigo = c.texto;
+  c.texto = novo;
+  c.editado_em = new Date().toISOString();
+  c.editado_por = nome;
+  saveROSingle(ro);
+  var m = document.getElementById('modal-com'); if(m) m.remove();
+  abrirComentarios(roId);
+  toast('Comentario atualizado.');
+}
+function editarComentarioROI(roiId, idx){
+  var roi = state.rois.find(function(r){ return r.id===roiId; });
+  if(!roi || !roi.comentarios_roi || !roi.comentarios_roi[idx]) return;
+  var c = roi.comentarios_roi[idx];
+  var nome = state.user ? state.user.nome : '—';
+  var ehChefia = state.user && state.user.perfil==='chefia';
+  if(!ehChefia && c.user !== nome){ toast('Apenas o autor ou a chefia podem editar este comentario.'); return; }
+  var novo = window.prompt('Editar comentario:', c.texto);
+  if(novo === null) return;
+  novo = novo.trim();
+  if(!novo){ toast('O comentario nao pode ficar vazio.'); return; }
+  if(novo === c.texto) return;
+  if(!c.historico) c.historico = [];
+  c.historico.push({ texto_anterior:c.texto, ts:new Date().toISOString(), user:nome });
+  var antigo = c.texto;
+  c.texto = novo;
+  c.editado_em = new Date().toISOString();
+  c.editado_por = nome;
+  addLog(roi,'Comentario editado', '"'+antigo.substring(0,40)+'" -> "'+novo.substring(0,40)+'"');
+  saveSingle(roi);
+  var m = document.getElementById('modal-com-roi'); if(m) m.remove();
+  abrirComentariosROI(roiId);
+  toast('Comentario atualizado.');
 }
 function salvarComentario(roId){
   var el = document.getElementById('inp-comentario');
@@ -3113,27 +3192,27 @@ function getTexto(roi) {
   var lines = [
     'Prezado(a) colega,',
     '',
-    'Em atencao ao disposto na Portaria DIRBEN/INSS n. 1.309/2025, notificamos Vossa Senhoria acerca do encerramento da Supervisao Tecnica n. '+roi.protocolo_supervisao+', cuja conclusao '+p+' de NB '+NB+', protocolo n. '+PTAR+', indicando a necessidade de revisao '+t+' do ato administrativo.',
+    'Em atenção ao disposto na Portaria DIRBEN/INSS n. 1.309/2025, notificamos Vossa Senhoria acerca do encerramento da Supervisão Técnica n. '+roi.protocolo_supervisao+', cuja conclusão '+p+' de NB '+NB+', protocolo n. '+PTAR+', indicando a necessidade de revisão '+t+' do ato administrativo.',
     '',
-    'Em razao da conclusao da Supervisao Tecnica, foi cadastrada a Revisao de Oficio Identificada (ROI) n. '+roi.numero_roi+', cuja responsabilidade foi atribuida a Vossa Senhoria, nos termos da Portaria mencionada.',
+    'Em razão da conclusão da Supervisão Técnica, foi cadastrada a Revisão de Ofício Identificada (ROI) n. '+roi.numero_roi+', cuja responsabilidade foi atribuída a Vossa Senhoria, nos termos da Portaria mencionada.',
     '',
-    'Comunicamos que o prazo para analise e adocao de providencias, com a consequente conclusao da ROI, e de 05 (cinco) dias uteis, contados a partir da data do envio deste e-mail.',
+    'Comunicamos que o prazo para análise e adoção de providências, com a consequente conclusão da ROI, é de 10 (dez) dias úteis, contados a partir da data do envio deste e-mail.',
     '',
-    'Esclarecemos que, em caso de duvida tecnica, Vossa Senhoria podera cadastrar uma subtarefa de Suporte Tecnico - RD, vinculada a respectiva ROI.',
+    'Esclarecemos que, em caso de dúvida técnica, Vossa Senhoria poderá cadastrar uma subtarefa de Suporte Técnico - RD, vinculada à respectiva ROI.',
     '',
-    'Ressaltamos que a inobservancia, sem justa causa, das orientacoes da Supervisao Tecnica pode caracterizar infracao administrativa (art. 117, IV, Lei 8.112/1990). Caso verificada resistencia injustificada, sera cadastrado processo SEI.',
+    'Ressaltamos que a inobservância, sem justa causa, das orientações da Supervisão Técnica pode caracterizar infração administrativa (art. 117, IV, Lei 8.112/1990). Caso verificada resistência injustificada, será cadastrado processo SEI.',
     '',
-    'A presente comunicacao integra o processo revisional e segue com copia para a chefia imediata.',
+    'A presente comunicação integra o processo revisional e segue com cópia para a chefia imediata.',
     '',
-    'ORIENTACOES COMPLEMENTARES',
+    'ORIENTAÇÕES COMPLEMENTARES',
     '',
-    'A tarefa de ROI encontra-se na OL da SARD (090014). Nao ha necessidade de reabertura da tarefa supervisionada.',
+    'A tarefa de ROI encontra-se na OL da SARD (090014). Não há necessidade de reabertura da tarefa supervisionada.',
     '',
-    'Finalizados os procedimentos revisionais, o servidor deve notificar o SEST-RD via e-mail informando a conclusao.',
+    'Finalizados os procedimentos revisionais, o servidor deve notificar o SEST-RD via e-mail informando a conclusão.',
     '',
     'Cordialmente,',
     '',
-    'Setor de Suporte Tecnico ao Reconhecimento de Direitos - SEST-RD/GEXSLS'
+    'Setor de Suporte Técnico ao Reconhecimento de Direitos - SEST-RD/GEXSLS'
   ];
   return lines.join('\n');
 }
@@ -3143,7 +3222,7 @@ function gerarPDF(roiId) {
   var texto = document.getElementById('notif-text').value;
   var doc = new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('NOTIFICACAO - SUPERVISAO TECNICA / SESTRD', 105, 20, {align:'center'});
+  doc.text('NOTIFICAÇÃO - SUPERVISÃO TÉCNICA / SESTRD', 105, 20, {align:'center'});
   doc.setLineWidth(0.5); doc.line(20,24,190,24);
   doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
   var linhas = doc.splitTextToSize(texto, 165);
@@ -3209,7 +3288,7 @@ function handleChange(e) {
     var ant = roi.aro.data_notificacao;
     roi.aro.data_notificacao = t.value;
     if (t.value) {
-      var lim = fmtISO(addWD(new Date(t.value), 5));
+      var lim = fmtISO(addWD(new Date(t.value), 10));
       roi.aro.data_limite = lim;
       addLog(roi,'Data notificacao editada', ant+' -> '+t.value+' | Novo limite: '+lim);
       save(); toast('Data atualizada! Limite: '+fmtBR(lim));
@@ -3260,19 +3339,22 @@ function handleChange(e) {
   if (action==='exig-data') {
     roi.aro.exigencia_data_envio = t.value;
     if (t.value) {
-      var dExig = new Date(t.value);
-      dExig.setDate(dExig.getDate()+35);
-      roi.aro.exigencia_data_limite = fmtISO(dExig);
+      if (!roi.aro.exigencia_limite_manual) {
+        var dExig = new Date(t.value);
+        dExig.setDate(dExig.getDate()+35);
+        roi.aro.exigencia_data_limite = fmtISO(dExig);
+      }
       // Data limite ARO = data expiracao da exigencia (semaforo usa esta data)
       roi.aro.data_limite_original = roi.aro.data_limite_original || roi.aro.data_limite;
       roi.aro.data_limite = roi.aro.exigencia_data_limite;
       addLog(roi,'Exigencia: data de envio registrada',
-        t.value+' | Prazo 35 dias corridos: '+fmtBR(roi.aro.exigencia_data_limite));
+        t.value+' | Prazo limite: '+fmtBR(roi.aro.exigencia_data_limite)+(roi.aro.exigencia_limite_manual?' (manual)':' (35 dias corridos)'));
       save();
       toast('Data de envio salva! Data limite ARO atualizada: '+fmtBR(roi.aro.data_limite));
       renderDetail(id);
     } else {
       roi.aro.exigencia_data_limite = null;
+      roi.aro.exigencia_limite_manual = false;
       // Restaura data limite original se disponivel
       if (roi.aro.data_limite_original) {
         roi.aro.data_limite = roi.aro.data_limite_original;
@@ -3282,7 +3364,31 @@ function handleChange(e) {
       renderDetail(id);
     }
   }
+  if (action==='exig-limite-manual') {
+    roi.aro.exigencia_data_limite   = t.value || null;
+    roi.aro.exigencia_limite_manual = !!t.value;
+    if (t.value) {
+      roi.aro.data_limite_original = roi.aro.data_limite_original || roi.aro.data_limite;
+      roi.aro.data_limite = t.value;
+    }
+    addLog(roi, t.value?'Exigencia: data limite ajustada manualmente':'Exigencia: data limite manual removida', t.value||'');
+    save();
+    toast(t.value?'Data limite da exigencia definida manualmente: '+fmtBR(t.value):'Data limite manual removida.');
+    renderDetail(id);
+  }
 
+  if (action==='aro-numero-ro') {
+    roi.aro.numero_ro = t.value;
+    addLog(roi,'Numero da RO registrado', t.value);
+    save(); toast('Numero da RO salvo!');
+  }
+  if (action==='sei-manif') {
+    if (!roi.sei) roi.sei = {};
+    roi.sei[campo] = t.value;
+    var labelManif = {manif_sgca:'SGCA',manif_sard:'SARD',manif_chefia:'chefia imediata'}[campo]||campo;
+    addLog(roi,'SEI: manifestacao '+labelManif+' registrada', t.value||'(removida)');
+    save(); toast('Manifestacao '+labelManif+' salva!');
+  }
   if (action==='suporte-data') {
     roi.aro.data_suporte_abertura = t.value;
     addLog(roi,'Suporte: data de abertura editada manualmente', t.value);
@@ -3313,13 +3419,26 @@ function handleChange(e) {
   if (action==='sei-data') {
     if (!roi.sei) roi.sei = {};
     roi.sei.data_abertura = t.value;
-    if (t.value) {
+    if (t.value && !roi.sei.limite_manual) {
       var limSEI = fmtISO(addWD(new Date(t.value), 10));
       roi.sei.data_limite = limSEI;
       addLog(roi,'SEI data abertura', t.value+' | Limite: '+limSEI);
       save(); toast('Data SEI salva! Prazo: '+fmtBR(limSEI));
       renderDetail(id);
+    } else if (t.value) {
+      addLog(roi,'SEI data abertura registrada', t.value+' | Limite manual preservado');
+      save(); toast('Data de abertura SEI salva (limite manual preservado).');
+      renderDetail(id);
     } else { save(); }
+  }
+  if (action==='sei-limite-manual') {
+    if (!roi.sei) roi.sei = {};
+    roi.sei.data_limite   = t.value || null;
+    roi.sei.limite_manual = !!t.value;
+    addLog(roi, t.value?'SEI: data limite ajustada manualmente':'SEI: data limite manual removida', t.value||'');
+    save();
+    toast(t.value?'Data limite SEI definida manualmente: '+fmtBR(t.value):'Data limite SEI manual removida.');
+    renderDetail(id);
   }
 }
 function registrarRespostaSuporte(id) {
@@ -3385,39 +3504,39 @@ function getTextoDespacho(roi) {
   var lines = [
     'MODELO DE DESPACHO PARA SEI',
     '',
-    '1. Trata-se de indicios de oposicao de resistencia injustificada por parte de servidor, no ambito de analise de Revisao de Oficio Identificada (ROI), em procedimento de concessao de beneficio previdenciario.',
+    '1. Trata-se de indícios de oposição de resistência injustificada por parte de servidor, no âmbito de análise de Revisão de Ofício Identificada (ROI), em procedimento de concessão de benefício previdenciário.',
     '',
-    '1.1 O procedimento de Revisao de Oficio Identificada tem como responsavel o(a) servidor(a) '+serv+', matricula '+matr+'.',
+    '1.1 O procedimento de Revisão de Ofício Identificada tem como responsável o(a) servidor(a) '+serv+', matrícula '+matr+'.',
     '',
-    '1.2 A Supervisao Tecnica n. '+supTec+' '+parecer.toLowerCase()+' do protocolo '+protar+', NB '+nb+', requerido por '+interes+'.',
+    '1.2 A Supervisão Técnica n. '+supTec+' '+parecer.toLowerCase()+' do protocolo '+protar+', NB '+nb+', requerido por '+interes+'.',
     '',
-    '2. Nos termos do art. 117, IV, da Lei 8.112/1991, ao servidor e proibido opor resistencia injustificada ao andamento de documento e processo ou execucao de servico, a qual, no ambito da supervisao tecnica deve ser apurada conforme descrito no Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
+    '2. Nos termos do art. 117, IV, da Lei 8.112/1990, ao servidor é proibido opor resistência injustificada ao andamento de documento e processo ou execução de serviço, a qual, no âmbito da supervisão técnica deve ser apurada conforme descrito no Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
-    '2.1 Desta forma, cadastra-se o presente processo SEI, para fins de analise da autoria e tipificacao da conduta de resistencia injustificada, conforme exposto a seguir:',
+    '2.1 Desta forma, cadastra-se o presente processo SEI, para fins de análise da autoria e tipificação da conduta de resistência injustificada, conforme exposto a seguir:',
     '',
-    'I - DOS FATOS E DA CARACTERIZACAO DA RECUSA INJUSTIFICADA',
+    'I - DOS FATOS E DA CARACTERIZAÇÃO DA RECUSA INJUSTIFICADA',
     '',
-    '3. A Revisao de Oficio Identificada n. '+aroNum+' foi criada em '+dtCria+', pela Supervisao Tecnica n. '+supTec+', sendo em seguida encaminhada subtarefa de Acompanhamento de Revisao de Oficio a este SEST-RD.',
+    '3. A Revisão de Ofício Identificada n. '+aroNum+' foi criada em '+dtCria+', pela Supervisão Técnica n. '+supTec+', sendo em seguida encaminhada subtarefa de Acompanhamento de Revisão de Ofício a este SEST-RD.',
     '',
-    '4. [PREENCHER: descrever orientacoes emitidas, despachono e data correspondente]',
+    '4. [PREENCHER: descrever orientações emitidas, despacho e data correspondente]',
     '',
-    '5. A notificacao efetivou-se em '+dtNoti+', apos decorridos 5 (cinco) dias uteis da data do download do processo eletronico, ocorrido em [DATA DOWNLOAD], conforme faz prova o historico de acoes da ROI, nos termos do item 3.5.3 do Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
+    '5. A notificação efetivou-se em '+dtNoti+', após decorridos 5 (cinco) dias úteis da data do download do processo eletrônico, ocorrido em [DATA DOWNLOAD], conforme faz prova o histórico de ações da ROI, nos termos do item 3.5.3 do Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
-    'a) Transcorrido o prazo regulamentar, verificou-se que o(a) servidor(a) supervisionado(a) [PREENCHER: descrever conduta — ex: adicionou despacho sem texto, nao corrigiu dados de contato, etc.], em desacordo com o disposto no art. 33, § 2, inciso II da Portaria DIRBEN/INSS n. 1.309/2025.',
+    'a) Transcorrido o prazo regulamentar, verificou-se que o(a) servidor(a) supervisionado(a) [PREENCHER: descrever conduta — ex: adicionou despacho sem texto, não corrigiu dados de contato, etc.], em desacordo com o disposto no art. 33, § 2º, inciso II da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
-    'b) Conforme detalhado acima, resta devidamente comprovada a materialidade da recusa injustificada por parte do(a) servidor(a) supervisionado(a), evidenciada pelas condutas descritas, que se revelaram inadequadas para a efetiva revisao do ato, nao contribuindo para a adequada resolucao do processo, conforme item 1.1 do Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
+    'b) Conforme detalhado acima, resta devidamente comprovada a materialidade da recusa injustificada por parte do(a) servidor(a) supervisionado(a), evidenciada pelas condutas descritas, que se revelaram inadequadas para a efetiva revisão do ato, não contribuindo para a adequada resolução do processo, conforme item 1.1 do Anexo IV da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
-    'II - DAS PROVIDENCIAS A SEREM ADOTADAS EM AMBITO LOCAL',
+    'II - DAS PROVIDÊNCIAS A SEREM ADOTADAS EM ÂMBITO LOCAL',
     '',
-    '6. Considerando a inerciana do(a) servidor(a) responsavel e ausente causa suspensiva dos prazos dispostos na Portaria DIRBEN/INSS n. 1.309/2025 ou que indique impedimento daquele(a), instaura-se o presente processo, com remessa dos autos ao(a):',
+    '6. Considerando a inércia do(a) servidor(a) responsável e ausente causa suspensiva dos prazos dispostos na Portaria DIRBEN/INSS n. 1.309/2025 ou que indique impedimento daquele(a), instaura-se o presente processo, com remessa dos autos ao(à):',
     '',
-    'a) Chefia imediata que devera consignar as acoes adotadas junto ao servidor analisador para inicio/andamento dos procedimentos revisionais, bem como consignar se ha/houve situacao excepcional que justifique o nao cumprimento dos prazos, tais como licencas, ferias, dentre outros afastamentos;',
+    'a) Chefia imediata que deverá consignar as ações adotadas junto ao servidor analisador para início/andamento dos procedimentos revisionais, bem como consignar se há/houve situação excepcional que justifique o não cumprimento dos prazos, tais como licenças, férias, dentre outros afastamentos;',
     '',
-    'b) Servico de Gestao dos Canais de Atendimento - SGCA, para efetuar bloqueio cautelar nas caixas ordinaria e extraordinaria, pelo prazo de cinco dias uteis, para que seja priorizada a conclusao da ROI, consignando nos autos a efetivacao da acao, bem como o desbloqueio do acesso, conforme o caso;',
+    'b) Serviço de Gestão dos Canais de Atendimento - SGCA, para efetuar bloqueio cautelar nas caixas ordinária e extraordinária, pelo prazo de cinco dias úteis, para que seja priorizada a conclusão da ROI, consignando nos autos a efetivação da ação, bem como o desbloqueio do acesso, conforme o caso;',
     '',
-    'c) Secao de Analise de Reconhecimento de Direitos - SARD para ciencia e acompanhamento, haja vista competencia prevista no art. 33, §11, "IV", da Portaria DIRBEN/INSS n. 1.309/2025.',
+    'c) Seção de Análise de Reconhecimento de Direitos - SARD para ciência e acompanhamento, haja vista competência prevista no art. 33, §11, "IV", da Portaria DIRBEN/INSS n. 1.309/2025.',
     '',
-    '7. Apos a remessa dos autos, notifique-se o servidor acerca da instauracao do presente procedimento.'
+    '7. Após a remessa dos autos, notifique-se o servidor acerca da instauração do presente procedimento.'
   ];
   return lines.join('\n');
 }
@@ -3470,7 +3589,7 @@ function gerarPDFDespacho(roiId) {
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(11);
-  doc.text('DESPACHO — RESISTENCIA INJUSTIFICADA / SESTRD', 105, 18, {align:'center'});
+  doc.text('DESPACHO — RESISTÊNCIA INJUSTIFICADA / SESTRD', 105, 18, {align:'center'});
   doc.setFontSize(9);
   doc.setFont('helvetica','normal');
   doc.setTextColor(100);
@@ -3518,7 +3637,7 @@ function renotificar(id) {
     return;
   }
   var novaNotif = fmtISO(new Date());
-  var novoLim   = fmtISO(addWD(new Date(), 5));
+  var novoLim   = fmtISO(addWD(new Date(), 10));
   var antigaNotif = roi.aro.data_notificacao;
   roi.aro.data_notificacao      = novaNotif;
   roi.aro.data_limite           = novoLim;
@@ -3698,10 +3817,15 @@ function abrirComentariosROI(roiId) {
 
   if(coms.length){
     html += '<div class="log-list" style="margin-bottom:1rem;max-height:300px;overflow-y:auto">';
-    coms.slice().reverse().forEach(function(c){
+    var nC = coms.length;
+    coms.slice().reverse().forEach(function(c, ri){
+      var idx = nC-1-ri;
       html += '<div class="log-item">';
       html += '<div class="log-time">'+new Date(c.ts).toLocaleString('pt-BR')+'</div>';
-      html += '<div class="log-txt"><span class="log-user">'+c.user+'</span><br>'+c.texto+'</div>';
+      html += '<div class="log-txt"><span class="log-user">'+c.user+'</span>';
+      html += ' <span title="Editar comentario" style="cursor:pointer;color:var(--blue);font-size:11px" onclick="editarComentarioROI(\''+roi.id+'\','+idx+')">✏</span>';
+      if(c.editado_em) html += ' <span style="font-size:10px;color:var(--gray)" title="Editado em '+new Date(c.editado_em).toLocaleString('pt-BR')+(c.editado_por?' por '+c.editado_por:'')+'">(editado)</span>';
+      html += '<br>'+c.texto+'</div>';
       html += '</div>';
     });
     html += '</div>';
@@ -3732,6 +3856,46 @@ function abrirComentariosROI(roiId) {
   });
 }
 
+async function uploadNotificacao(roiId, inputEl) {
+  var roi = state.rois.find(function(r){ return r.id===roiId; });
+  if (!roi) return;
+  var file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') { toast('Anexe um arquivo PDF.'); inputEl.value=''; return; }
+  if (file.size > 10*1024*1024) { toast('Arquivo muito grande (max. 10MB).'); inputEl.value=''; return; }
+  toast('Enviando anexo...');
+  var safe = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  var path = roiId.replace(/[^a-zA-Z0-9._-]/g,'_') + '/' + Date.now() + '_' + safe;
+  try {
+    var up = await _supa.storage.from('notificacoes').upload(path, file, { contentType:'application/pdf', upsert:false });
+    if (up.error) throw up.error;
+    var pub = _supa.storage.from('notificacoes').getPublicUrl(path);
+    var url = (pub && pub.data) ? pub.data.publicUrl : '';
+    if (!roi.anexos) roi.anexos = [];
+    roi.anexos.push({ nome:file.name, path:path, url:url, ts:new Date().toISOString(), user: state.user?state.user.nome:'—' });
+    addLog(roi,'Notificacao anexada', file.name);
+    await saveSingle(roi);
+    toast('Anexo enviado!');
+    renderDetail(roiId);
+  } catch(e) {
+    console.error('uploadNotificacao:', e);
+    toast('Falha no upload. Verifique o bucket "notificacoes" no Supabase. ('+(e.message||e)+')');
+  }
+  inputEl.value='';
+}
+async function removerAnexo(roiId, idx) {
+  var roi = state.rois.find(function(r){ return r.id===roiId; });
+  if (!roi || !roi.anexos || !roi.anexos[idx]) return;
+  if (!confirm('Remover este anexo?')) return;
+  var a = roi.anexos[idx];
+  try { if (a.path) await _supa.storage.from('notificacoes').remove([a.path]); }
+  catch(e) { console.error('removerAnexo:', e); }
+  roi.anexos.splice(idx,1);
+  addLog(roi,'Anexo removido', a.nome||'');
+  await saveSingle(roi);
+  toast('Anexo removido.');
+  renderDetail(roiId);
+}
 function simEmail(id) {
   var roi = state.rois.find(function(r){ return r.id===id; });
   addLog(roi,'Email de notificacao enviado (simulado)', roi.aro&&roi.aro.nome_servidor?roi.aro.nome_servidor:'');
@@ -3792,7 +3956,7 @@ function salvarROI() {
     if (dupARO) { toast('⚠ Ja existe uma ARO cadastrada com o numero '+aro); return; }
   }
   var dataN = document.getElementById('f-data-notif').value;
-  var limARO = dataN ? fmtISO(addWD(new Date(dataN), 5)) : '';
+  var limARO = dataN ? fmtISO(addWD(new Date(dataN), 10)) : '';
   var novaROI = {
     id: roi, numero_roi: roi,
     numero_aro: document.getElementById('f-aro').value.trim(),
@@ -3948,7 +4112,7 @@ function confirmarLotePAT(){
   var criadas=0;
   q.forEach(function(r){
     var dataN = r.data_notificacao||'';
-    var limARO = dataN ? fmtISO(addWD(new Date(dataN),5)) : '';
+    var limARO = dataN ? fmtISO(addWD(new Date(dataN),10)) : '';
     var novaROI = {
       id: r.numero_roi, numero_roi: r.numero_roi,
       numero_aro: (r.numero_aro||'').trim(),
@@ -4002,7 +4166,7 @@ document.querySelectorAll('.nav-item').forEach(function(n) {
 });
 document.getElementById('f-data-notif').addEventListener('change', function() {
   var v = this.value;
-  document.getElementById('f-data-limite').value = v ? fmtISO(addWD(new Date(v), 5)) : '';
+  document.getElementById('f-data-limite').value = v ? fmtISO(addWD(new Date(v), 10)) : '';
 });
 
 // ═══════════════════════════════════════════

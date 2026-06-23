@@ -1,0 +1,3 @@
+# Backups locais e logs de deploy (nao precisam ir para o repositorio)
+index.backup-*.html
+deploy_log.txt
